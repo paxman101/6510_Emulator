@@ -10,9 +10,10 @@
 /* 6510 Registers (https://www.c64-wiki.com/wiki/CPU_6510-Register_set) */
 static u_int16_t PC;
 static u_int8_t  STATUS;
-static u_int8_t  A;
-static u_int8_t  X;
-static u_int8_t  Y;
+static u_int8_t  A;         /* accumulator */
+static u_int8_t  X;         /* X index */
+static u_int8_t  Y;         /* Y index */
+static u_int8_t  S;         /* stack point */
 
 /* Status Flags */
 enum STATUS_FLAG {
