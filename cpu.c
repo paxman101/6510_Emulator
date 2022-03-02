@@ -16,7 +16,7 @@ static u_int8_t  Y;         /* Y index */
 static u_int8_t  S;         /* stack point */
 
 /* Status Flags */
-enum STATUS_FLAG {
+enum StatusFlag {
     STAT_CARRY = 0,
     STAT_ZERO  = 1,
     STAT_IRQ_DISABLE = 2,
@@ -26,6 +26,6 @@ enum STATUS_FLAG {
     STAT_NEGATIVE = 7
 };
 
-static inline bool get_status_flag(enum STATUS_FLAG flag) {
+static inline bool get_status_flag(enum StatusFlag flag) {
     return (STATUS ^ (1 << flag)) >> flag;
 }
