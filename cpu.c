@@ -39,7 +39,48 @@ enum Operation {
     OP_STA,
     OP_LDA,
     OP_CMP,
-    OP_SBC
+    OP_SBC,
+    OP_ASL,
+    OP_ROL,
+    OP_LSR,
+    OP_ROR,
+    OP_STX,
+    OP_LDX,
+    OP_DEC,
+    OP_INC,
+    OP_BIT,
+    OP_JMP,
+    OP_STY,
+    OP_LDY,
+    OP_CPY,
+    OP_CPX,
+    OP_BIF, /* General "branch if" op. The condition is defined for each specific branch instruc. in the OpcodeInfo struct */
+    OP_BRK,
+    OP_JSR,
+    OP_RTI,
+    OP_RTS,
+    OP_PHP,
+    OP_PLP,
+    OP_PHA,
+    OP_PLA,
+    OP_DEY,
+    OP_TAY,
+    OP_INY,
+    OP_INX,
+    OP_CLC,
+    OP_SEC,
+    OP_CLI,
+    OP_SEI,
+    OP_TYA,
+    OP_CLV,
+    OP_CLD,
+    OP_SED,
+    OP_TXA,
+    OP_TXS,
+    OP_TAX,
+    OP_TSX,
+    OP_DEX,
+    OP_NOP
 };
 
 char *op_names[] = {
@@ -50,7 +91,57 @@ char *op_names[] = {
        "OP_STA",
        "OP_LDA",
        "OP_CMP",
-       "OP_SBC"
+       "OP_SBC",
+       "OP_ASL",
+       "OP_ROL",
+       "OP_LSR",
+       "OP_ROR",
+       "OP_STX",
+       "OP_LDX",
+       "OP_DEC",
+       "OP_INC",
+       "OP_SBC",
+       "OP_ASL",
+       "OP_ROL",
+       "OP_LSR",
+       "OP_ROR",
+       "OP_STX",
+       "OP_LDX",
+       "OP_DEC",
+       "OP_INC",
+       "OP_BIT",
+       "OP_JMP",
+       "OP_STY",
+       "OP_LDY",
+       "OP_CPY",
+       "OP_CPX",
+       "OP_BIF",
+       "OP_BRK",
+       "OP_JSR",
+       "OP_RTI",
+       "OP_RTS",
+       "OP_PHP",
+       "OP_PLP",
+       "OP_PHA",
+       "OP_PLA",
+       "OP_DEY",
+       "OP_TAY",
+       "OP_INY",
+       "OP_INX",
+       "OP_CLC",
+       "OP_SEC",
+       "OP_CLI",
+       "OP_SEI",
+       "OP_TYA",
+       "OP_CLV",
+       "OP_CLD",
+       "OP_SED",
+       "OP_TXA",
+       "OP_TXS",
+       "OP_TAX",
+       "OP_TSX",
+       "OP_DEX",
+       "OP_NOP"
 };
 
 enum AddressingMode {
@@ -70,7 +161,9 @@ enum AddressingMode {
 struct OpcodeInfo {
     enum Operation op_type;
     enum AddressingMode addr_mode;
-    char index; /* Which index A or B to use for indexed operations. X = 'X', Y = 'Y'. */
+    char index;                        /* Which index A or B to use for indexed operations. X = 'X', Y = 'Y'. */
+    enum StatusFlag branch_condition;  /* Flag used for OP_BIF */
+    bool branch_eq;                    /* bool for OP_BIF. true if we should branch when branch_condition is 1 and vice versa */
 };
 
 static struct OpcodeInfo OPCODE_INFO_VEC[256];
@@ -158,7 +251,228 @@ static void init_opcode_vec() {
             }
             OPCODE_INFO_VEC[instruction] = op_info;
         }
+
     }
+
+    /* cc = 2 case */
+    cc = 2;
+    for (aaa = 0; aaa < 8; aaa++) {
+        for (bbb = 0; bbb < 8; bbb++) {
+            u_int8_t instruction = (aaa << 5) + (bbb << 2) + cc;
+            bool is_valid = true;
+
+            struct OpcodeInfo op_info;
+
+            switch (aaa) {
+                case 0:
+                    op_info.op_type = OP_ASL;
+                    break;
+                case 1:
+                    op_info.op_type = OP_ROL;
+                    break;
+                case 2:
+                    op_info.op_type = OP_LSR;
+                    break;
+                case 3:
+                    op_info.op_type = OP_ROR;
+                    break;
+                case 4:
+                    op_info.op_type = OP_STX;
+                    break;
+                case 5:
+                    op_info.op_type = OP_LDX;
+                    break;
+                case 6:
+                    op_info.op_type = OP_DEC;
+                    break;
+                case 7:
+                    op_info.op_type = OP_INC;
+                    break;
+                default:
+                    assert(false);
+            }
+
+            switch (bbb) {
+                case 0:
+                    op_info.addr_mode = ADDR_IMMEDIATE;
+                    is_valid = op_info.op_type == OP_LDX;
+                    break;
+                case 1:
+                    op_info.addr_mode = ADDR_ZERO_PAGE;
+                    break;
+                case 2:
+                    op_info.addr_mode = ADDR_ACCUMULATOR;
+                    is_valid = op_info.op_type < OP_STX;
+                    break;
+                case 3:
+                    op_info.addr_mode = ADDR_ABSOLUTE;
+                    break;
+                case 5:
+                    op_info.addr_mode = ADDR_INDEXED_ZERO_PAGE;
+                    op_info.index = op_info.op_type == OP_STX || op_info.op_type == OP_LDX ? 'Y' : 'X';
+                    break;
+                case 7:
+                    op_info.addr_mode = ADDR_INDEX_ABSOLUTE;
+                    op_info.index = op_info.op_type == OP_LDX ? 'Y' : 'X';
+                    is_valid = op_info.op_type != OP_STX;
+                    break;
+                default:
+                    is_valid = false;
+            }
+            if (is_valid) {
+                OPCODE_INFO_VEC[instruction] = op_info;
+            }
+        }
+    }
+
+    /* cc = 0 case */
+    cc = 0;
+    for (aaa = 1; aaa < 8; aaa++) {
+        for (bbb = 0; bbb < 8; bbb++) {
+            u_int8_t instruction = (aaa << 5) + (bbb << 2) + cc;
+            bool is_valid = true;
+
+            struct OpcodeInfo op_info;
+
+            switch (aaa) {
+                case 1:
+                    op_info.op_type = OP_BIT;
+                    break;
+                case 2:
+                case 3:
+                    op_info.op_type = OP_JMP;
+                    break;
+                case 4:
+                    op_info.op_type = OP_STY;
+                    break;
+                case 5:
+                    op_info.op_type = OP_LDY;
+                    break;
+                case 6:
+                    op_info.op_type = OP_CPY;
+                    break;
+                case 7:
+                    op_info.op_type = OP_CPX;
+                    break;
+                default:
+                    assert(false);
+            }
+
+            switch (bbb) {
+                case 0:
+                    op_info.addr_mode = ADDR_IMMEDIATE;
+                    is_valid = op_info.op_type > OP_STY;
+                    break;
+                case 1:
+                    op_info.addr_mode = ADDR_ZERO_PAGE;
+                    is_valid = op_info.op_type != OP_JMP;
+                    break;
+                case 3:
+                    op_info.addr_mode = ADDR_ABSOLUTE;
+                    if (aaa == 3) {
+                        op_info.addr_mode = ADDR_ABSOLUTE_INDIRECT;
+                    }
+                    break;
+                case 5:
+                    op_info.addr_mode = ADDR_INDEXED_ZERO_PAGE;
+                    op_info.index = 'X';
+                    is_valid = op_info.op_type == OP_STY || op_info.op_type == OP_LDY;
+                    break;
+                case 7:
+                    op_info.addr_mode = ADDR_INDEX_ABSOLUTE;
+                    op_info.index = 'X';
+                    is_valid = op_info.op_type == OP_LDY;
+                    break;
+                default:
+                    is_valid = false;
+            }
+            if (is_valid) {
+                OPCODE_INFO_VEC[instruction] = op_info;
+            }
+        }
+    }
+
+    /* conditional branch instructions with bit pattern xxy10000 */
+    for (u_int8_t xx = 0; xx < 4; xx++) {
+        for (u_int8_t y = 0; y < 2; y++) {
+            u_int8_t instruction = (xx << 6) + (y << 5) + 16;
+            struct OpcodeInfo op_info = {.op_type = OP_BIF, .addr_mode = ADDR_RELATIVE, .branch_eq = y};
+            switch (xx) {
+                case 0:
+                    op_info.branch_condition = STAT_NEGATIVE;
+                    break;
+                case 1:
+                    op_info.branch_condition = STAT_OVERFLOW;
+                    break;
+                case 2:
+                    op_info.branch_condition = STAT_CARRY;
+                    break;
+                case 3:
+                    op_info.branch_condition = STAT_ZERO;
+                    break;
+                default:
+                    assert(false);
+            }
+            OPCODE_INFO_VEC[instruction] = op_info;
+        }
+    }
+
+    /* Remaining instructions: */
+    struct OpcodeInfo op_info = {.addr_mode = ADDR_IMPLIED};
+    op_info.op_type = OP_BRK;
+    OPCODE_INFO_VEC[0x00] = op_info;
+    op_info.op_type = OP_JSR;
+    op_info.addr_mode = ADDR_ABSOLUTE;
+    OPCODE_INFO_VEC[0x20] = op_info;
+    op_info.op_type = OP_RTI;
+    op_info.addr_mode = ADDR_IMPLIED;
+    OPCODE_INFO_VEC[0x40] = op_info;
+    op_info.op_type = OP_RTS;
+    OPCODE_INFO_VEC[0x60] = op_info;
+    op_info.op_type = OP_PHP;
+    OPCODE_INFO_VEC[0x08] = op_info;
+    op_info.op_type = OP_PLP;
+    OPCODE_INFO_VEC[0x28] = op_info;
+    op_info.op_type = OP_PHA;
+    OPCODE_INFO_VEC[0x48] = op_info;
+    op_info.op_type = OP_PLA;
+    OPCODE_INFO_VEC[0x68] = op_info;
+    op_info.op_type = OP_DEY;
+    OPCODE_INFO_VEC[0x88] = op_info;
+    op_info.op_type = OP_TAY;
+    OPCODE_INFO_VEC[0xA8] = op_info;
+    op_info.op_type = OP_INY;
+    OPCODE_INFO_VEC[0xC8] = op_info;
+    op_info.op_type = OP_INX;
+    OPCODE_INFO_VEC[0xE8] = op_info;
+    op_info.op_type = OP_CLC;
+    OPCODE_INFO_VEC[0x18] = op_info;
+    op_info.op_type = OP_SEC;
+    OPCODE_INFO_VEC[0x38] = op_info;
+    op_info.op_type = OP_CLI;
+    OPCODE_INFO_VEC[0x58] = op_info;
+    op_info.op_type = OP_SEI;
+    OPCODE_INFO_VEC[0x78] = op_info;
+    op_info.op_type = OP_TYA;
+    OPCODE_INFO_VEC[0x98] = op_info;
+    op_info.op_type = OP_CLV;
+    OPCODE_INFO_VEC[0xB8] = op_info;
+    op_info.op_type = OP_CLD;
+    OPCODE_INFO_VEC[0xD8] = op_info;
+    op_info.op_type = OP_SED;
+    OPCODE_INFO_VEC[0xF8] = op_info;
+    op_info.op_type = OP_TXA;
+    OPCODE_INFO_VEC[0x8A] = op_info;
+    op_info.op_type = OP_TXS;
+    OPCODE_INFO_VEC[0x9A] = op_info;
+    op_info.op_type = OP_TAX;
+    OPCODE_INFO_VEC[0xAA] = op_info;
+    op_info.op_type = OP_TSX;
+    OPCODE_INFO_VEC[0xBA] = op_info;
+    op_info.op_type = OP_DEX;
+    OPCODE_INFO_VEC[0xCA] = op_info;
+    op_info.op_type = OP_NOP;
+    OPCODE_INFO_VEC[0xEA] = op_info;
 }
 
 static void instruction_decode(u_int16_t instruction) {
