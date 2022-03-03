@@ -8,6 +8,9 @@
 #include <stdbool.h>
 #include <assert.h>
 
+/* Change nth bit to val. https://stackoverflow.com/a/47990 */
+#define changeBit(num, n, val) ((num) = (num) & ~(1UL << (n)) | ((val) << (n)))
+
 /* 6510 Registers (https://www.c64-wiki.com/wiki/CPU_6510-Register_set) */
 static u_int16_t PC;
 static u_int8_t  STATUS;
@@ -28,7 +31,11 @@ enum StatusFlag {
 };
 
 static inline bool get_status_flag(enum StatusFlag flag) {
-    return (STATUS ^ (1 << flag)) >> flag;
+    return (STATUS & (1 << flag)) >> flag;
+}
+
+static inline void set_status_flag(enum StatusFlag flag, bool val) {
+    changeBit(STATUS, flag, val);
 }
 
 enum Operation {
@@ -476,6 +483,187 @@ static void init_opcode_vec() {
 }
 
 static void instruction_decode(u_int16_t instruction) {
+
+}
+
+static inline void set_negative_flag(u_int8_t reg_val) {
+    set_status_flag(STAT_NEGATIVE, reg_val >> 7);
+}
+
+static inline void set_zero_flag(u_int8_t reg_val) {
+    set_status_flag(STAT_NEGATIVE, reg_val == 0);
+}
+
+/* in order as shown on https://en.wikibooks.org/wiki/6502_Assembly */
+
+/* Load and store operations */
+
+static void lda(const u_int8_t *mem) {
+    A = *mem;
+    set_negative_flag(A);
+    set_zero_flag(A);
+}
+
+static void ldx(const u_int8_t *mem) {
+    X = *mem;
+    set_negative_flag(X);
+    set_zero_flag(X);
+}
+
+static void ldy(const u_int8_t *mem) {
+    Y = *mem;
+    set_negative_flag(Y);
+    set_zero_flag(Y);
+}
+
+static void sta(u_int8_t *mem) {
+    *mem = A;
+}
+
+static void stx(u_int8_t *mem) {
+    *mem = X;
+}
+
+static void sty(u_int8_t *mem) {
+    *mem = Y;
+}
+
+/* Arithmetic operations */
+
+static void adc(const u_int8_t *mem) {
+    A = A + *mem + get_status_flag(STAT_CARRY);
+    set_status_flag(STAT_CARRY, A < *mem);
+    set_zero_flag(A);
+    set_status_flag(STAT_OVERFLOW, (get_status_flag(STAT_NEGATIVE) == *mem >> 7) && (A >> 7 != *mem >> 7));
+    set_negative_flag(A);
+}
+
+static void sbc(const u_int8_t *mem) {
+    A = A - *mem - ~get_status_flag(STAT_CARRY);
+    // TODO: Status flags
+}
+
+/* Increment and decrement */
+
+static void inc(u_int8_t *mem) {
+    (*mem)++;
+    set_negative_flag(*mem);
+    set_zero_flag(*mem);
+}
+
+static void inx(u_int8_t *mem) {
+    X++;
+    set_negative_flag(X);
+    set_zero_flag(X);
+}
+
+static void iny(u_int8_t *mem) {
+    Y++;
+    set_negative_flag(Y);
+    set_zero_flag(Y);
+}
+
+static void dec(u_int8_t *mem) {
+    (*mem)++;
+    set_negative_flag(*mem);
+    set_zero_flag(*mem);
+}
+
+static void dex(u_int8_t *mem) {
+    X--;
+    set_negative_flag(X);
+    set_zero_flag(X);
+}
+
+static void dey(u_int8_t *mem) {
+    Y--;
+    set_negative_flag(Y);
+    set_zero_flag(Y);
+}
+
+/* Shift and rotate */
+
+static void asl(u_int8_t *mem) {
+    bool carry = *mem & 0x8;
+    *mem = *mem << 1;
+    set_negative_flag(*mem);
+    set_zero_flag(*mem);
+    set_status_flag(STAT_CARRY, carry);
+}
+
+static void lsr(u_int8_t *mem) {
+    bool carry = *mem & 1;
+    *mem = *mem >> 1;
+    set_negative_flag(*mem);
+    set_zero_flag(*mem);
+    set_status_flag(STAT_CARRY, carry);
+}
+
+static void rol(u_int8_t *mem) {
+    bool carry = *mem & 0x8;
+    *mem = *mem << 1;
+    changeBit(*mem, 0, get_status_flag(STAT_CARRY));
+    set_negative_flag(*mem);
+    set_zero_flag(*mem);
+    set_status_flag(STAT_CARRY, carry);
+}
+
+static void ror(u_int8_t *mem) {
+    bool carry = *mem & 1;
+    *mem = *mem >> 1;
+    changeBit(*mem, 7, get_status_flag(STAT_CARRY));
+    set_negative_flag(*mem);
+    set_zero_flag(*mem);
+    set_status_flag(STAT_CARRY, carry);
+}
+
+/* Logic */
+
+static void and(const u_int8_t *mem) {
+    A &= *mem;
+    set_negative_flag(A);
+    set_zero_flag(A);
+}
+
+static void ora(const u_int8_t *mem) {
+    A |= *mem;
+    set_negative_flag(A);
+    set_zero_flag(A);
+}
+
+static void eor(const u_int8_t *mem) {
+    A ^= *mem;
+    set_negative_flag(A);
+    set_zero_flag(A);
+}
+
+/* Compare and test bit */
+
+static void cmp(const u_int8_t *mem) {
+    set_status_flag(STAT_NEGATIVE, A < *mem);
+    set_status_flag(STAT_ZERO, A == *mem);
+    set_status_flag(STAT_CARRY, A >= *mem);
+}
+
+static void cpx(const u_int8_t *mem) {
+    set_status_flag(STAT_NEGATIVE, X < *mem);
+    set_status_flag(STAT_ZERO, X == *mem);
+    set_status_flag(STAT_CARRY, X >= *mem);
+}
+
+static void cpy(const u_int8_t *mem) {
+    set_status_flag(STAT_NEGATIVE, Y < *mem);
+    set_status_flag(STAT_ZERO, Y == *mem);
+    set_status_flag(STAT_CARRY, Y >= *mem);
+}
+
+static void bit(const u_int8_t *mem) {
+    u_int8_t anded_val = A & *mem;
+    set_status_flag(STAT_NEGATIVE, anded_val >> 7);
+    set_status_flag(STAT_OVERFLOW, anded_val >> 6);
+}
+
+static void bif(enum StatusFlag flag, bool branch_eq) {
 
 }
 
