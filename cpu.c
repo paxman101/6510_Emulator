@@ -663,8 +663,82 @@ static void bit(const u_int8_t *mem) {
     set_status_flag(STAT_OVERFLOW, anded_val >> 6);
 }
 
-static void bif(enum StatusFlag flag, bool branch_eq) {
+static void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
+    if (get_status_flag(flag) == branch_eq) {
+        PC += *mem;
+    }
+}
 
+static void tax() {
+    X = A;
+    set_negative_flag(X);
+    set_zero_flag(X);
+}
+
+static void txa() {
+    A = X;
+    set_negative_flag(A);
+    set_zero_flag(A);
+}
+
+static void tay() {
+    Y = A;
+    set_negative_flag(Y);
+    set_zero_flag(Y);
+}
+
+static void tya() {
+    A = Y;
+    set_negative_flag(A);
+    set_zero_flag(A);
+}
+
+static void tsx() {
+    X = S;
+    set_negative_flag(X);
+    set_zero_flag(X);
+}
+
+static void txs() {
+    S = X;
+    set_negative_flag(X);
+    set_zero_flag(X);
+}
+
+static void pha() {
+    // mem = get_mem(S)
+    S -= 8;
+    // *mem = A;
+}
+
+static void pla() {
+    // mem = get_mem(S)
+    // A = *mem
+    S += 8;
+}
+
+static void php() {
+    // mem = get_mem(S)
+    S -= 8;
+    // *mem = STATUS;
+}
+
+static void plp() {
+    // mem = get_mem(S)
+    // STATUS = *mem
+    S += 8;
+}
+
+/* Subroutines and jump */
+
+static void jmp(const u_int8_t *mem) {
+    PC = *mem;
+}
+
+static void jsr(const u_int8_t *mem) {
+    u_int8_t low_byte = (PC-1) & 0x0F;
+    u_int8_t high_byte = (PC-1) & 0xF0;
+    
 }
 
 #include <stdio.h>
