@@ -731,14 +731,143 @@ static void plp() {
 
 /* Subroutines and jump */
 
-static void jmp(const u_int8_t *mem) {
+static void jmp(const u_int16_t *mem) {
     PC = *mem;
 }
 
 static void jsr(const u_int8_t *mem) {
     u_int8_t low_byte = (PC-1) & 0x0F;
     u_int8_t high_byte = (PC-1) & 0xF0;
-    
+    S -= 16;
+    // stack_mem = get_mem(S + 8);
+    // *stack_mem = high_byte;
+    // stack_mem = get_mem(S);
+    // *stack_mem = low_byte;
+    PC = *mem;
+}
+
+static void rts () {
+    // u_int8_t low_byte = *get_mem(S);
+    // u_int8_t high_byte = *get_mem(S - 8);
+    S += 16;
+    // u_int16_t addr = (high_byte << 8) + low_byte;
+    // pc = addr;
+}
+
+static void rti () {
+    // u_int8_t low_byte = *get_mem(S);
+    // u_int8_t high_byte = *get_mem(S - 8);
+    S += 16;
+    // u_int16_t addr = (high_byte << 8) + low_byte;
+    // STATUS = addr;
+    // low_byte = *get_mem(S);
+    // high_byte = *get_mem(S - 8);
+    S += 16;
+    // u_int16_t addr = (high_byte << 8) + low_byte;
+    // PC = addr;
+}
+
+/* Set and clear */
+
+static void clc() {
+    set_status_flag(STAT_CARRY, 0);
+}
+
+static void sec() {
+    set_status_flag(STAT_CARRY, 1);
+}
+
+static void cld() {
+    set_status_flag(STAT_DEC_MODE, 0);
+}
+
+static void sed() {
+    set_status_flag(STAT_DEC_MODE, 1);
+}
+
+static void cli() {
+    set_status_flag(STAT_IRQ_DISABLE, 0);
+}
+
+static void sei() {
+    set_status_flag(STAT_IRQ_DISABLE, 1);
+}
+
+/* Miscellaneous */
+
+static void clv() {
+    set_status_flag(STAT_OVERFLOW, 0);
+}
+
+static void brk() {
+    set_status_flag(STAT_BRK_COMMAND, 1);
+    set_status_flag(STAT_IRQ_DISABLE, 1);
+}
+
+static void nop() {
+}
+
+typedef void (*OpFunc)();
+
+OpFunc op_vec[] = {
+        ora,
+        and,
+        eor,
+        adc,
+        sta,
+        lda,
+        cmp,
+        sbc,
+        asl,
+        rol,
+        lsr,
+        ror,
+        stx,
+        ldx,
+        dec,
+        inc,
+        bit,
+        jmp,
+        sty,
+        ldy,
+        cpy,
+        cpx,
+        bif, /* General "branch if" op. The condition is defined for each specific branch instruc. in the OpcodeInfo struct */
+        brk,
+        jsr,
+        rti,
+        rts,
+        php,
+        plp,
+        pha,
+        pla,
+        dey,
+        tay,
+        iny,
+        inx,
+        clc,
+        sec,
+        cli,
+        sei,
+        tya,
+        clv,
+        cld,
+        sed,
+        txa,
+        txs,
+        tax,
+        tsx,
+        dex,
+        nop
+
+};
+
+static inline void call0(struct OpcodeInfo *info) {
+    op_vec[info->op_type]();
+}
+
+static inline void call1(struct OpcodeInfo *info, u_int8_t *mem) {
+    op_vec[info->op_type](mem);
 }
 
 #include <stdio.h>
