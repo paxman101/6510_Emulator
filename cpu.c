@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <pthread.h>
+
+#include "memory.h"
 
 /* Change nth bit to val. https://stackoverflow.com/a/47990 */
 #define changeBit(num, n, val) ((num) = (num) & ~(1UL << (n)) | ((val) << (n)))
@@ -18,6 +21,9 @@ static u_int8_t  A;         /* accumulator */
 static u_int8_t  X;         /* X index */
 static u_int8_t  Y;         /* Y index */
 static u_int8_t  S;         /* stack point */
+
+static enum InterruptTypes current_interrupt = 0;
+pthread_t cpu_run_thread;
 
 /* Status Flags */
 enum StatusFlag {
@@ -494,6 +500,17 @@ static inline void set_zero_flag(u_int8_t reg_val) {
     set_status_flag(STAT_NEGATIVE, reg_val == 0);
 }
 
+static inline void push_onto_stack(u_int8_t val) {
+    u_int8_t *mem = getMemoryPtr(S + 0x100);
+    *mem = val;
+    S--;
+}
+
+static inline u_int8_t pop_from_stack() {
+    S++;
+    return *getMemoryPtr(S);
+}
+
 /* in order as shown on https://en.wikibooks.org/wiki/6502_Assembly */
 
 /* Load and store operations */
@@ -551,13 +568,13 @@ static void inc(u_int8_t *mem) {
     set_zero_flag(*mem);
 }
 
-static void inx(u_int8_t *mem) {
+static void inx() {
     X++;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void iny(u_int8_t *mem) {
+static void iny() {
     Y++;
     set_negative_flag(Y);
     set_zero_flag(Y);
@@ -569,13 +586,13 @@ static void dec(u_int8_t *mem) {
     set_zero_flag(*mem);
 }
 
-static void dex(u_int8_t *mem) {
+static void dex() {
     X--;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void dey(u_int8_t *mem) {
+static void dey() {
     Y--;
     set_negative_flag(Y);
     set_zero_flag(Y);
@@ -706,27 +723,19 @@ static void txs() {
 }
 
 static void pha() {
-    // mem = get_mem(S)
-    S -= 8;
-    // *mem = A;
+    push_onto_stack(A);
 }
 
 static void pla() {
-    // mem = get_mem(S)
-    // A = *mem
-    S += 8;
+    A = pop_from_stack();
 }
 
 static void php() {
-    // mem = get_mem(S)
-    S -= 8;
-    // *mem = STATUS;
+    push_onto_stack(STATUS);
 }
 
 static void plp() {
-    // mem = get_mem(S)
-    // STATUS = *mem
-    S += 8;
+    STATUS = pop_from_stack();
 }
 
 /* Subroutines and jump */
@@ -737,34 +746,28 @@ static void jmp(const u_int16_t *mem) {
 
 static void jsr(const u_int8_t *mem) {
     u_int8_t low_byte = (PC-1) & 0x0F;
-    u_int8_t high_byte = (PC-1) & 0xF0;
-    S -= 16;
-    // stack_mem = get_mem(S + 8);
-    // *stack_mem = high_byte;
-    // stack_mem = get_mem(S);
-    // *stack_mem = low_byte;
+    u_int8_t high_byte = ((PC-1) & 0xF0) >> 8;
+    push_onto_stack(high_byte);
+    push_onto_stack(low_byte);
     PC = *mem;
 }
 
 static void rts () {
-    // u_int8_t low_byte = *get_mem(S);
-    // u_int8_t high_byte = *get_mem(S - 8);
-    S += 16;
-    // u_int16_t addr = (high_byte << 8) + low_byte;
-    // pc = addr;
+    u_int8_t low_byte = pop_from_stack();
+    u_int8_t high_byte = pop_from_stack();
+    u_int16_t addr = (high_byte << 8) + low_byte;
+    PC = addr;
 }
 
 static void rti () {
-    // u_int8_t low_byte = *get_mem(S);
-    // u_int8_t high_byte = *get_mem(S - 8);
-    S += 16;
-    // u_int16_t addr = (high_byte << 8) + low_byte;
-    // STATUS = addr;
-    // low_byte = *get_mem(S);
-    // high_byte = *get_mem(S - 8);
-    S += 16;
-    // u_int16_t addr = (high_byte << 8) + low_byte;
-    // PC = addr;
+    u_int8_t low_byte = pop_from_stack();
+    u_int8_t high_byte = pop_from_stack();
+    u_int16_t addr = (high_byte << 8) + low_byte;
+    STATUS = addr;
+    low_byte = pop_from_stack();
+    high_byte = pop_from_stack();
+    addr = (high_byte << 8) + low_byte;
+    PC = addr;
 }
 
 /* Set and clear */
@@ -832,7 +835,7 @@ OpFunc op_vec[] = {
         ldy,
         cpy,
         cpx,
-        bif, /* General "branch if" op. The condition is defined for each specific branch instruc. in the OpcodeInfo struct */
+        (OpFunc) bif, /* General "branch if" op. The condition is defined for each specific branch instruc. in the OpcodeInfo struct */
         brk,
         jsr,
         rti,
@@ -859,8 +862,8 @@ OpFunc op_vec[] = {
         tsx,
         dex,
         nop
-
 };
+
 
 static inline void call0(struct OpcodeInfo *info) {
     op_vec[info->op_type]();
@@ -872,13 +875,13 @@ static inline void call1(struct OpcodeInfo *info, u_int8_t *mem) {
 
 #include <stdio.h>
 
-int main () {
-    init_opcode_vec();
-    for (int i = 0; i < 256; i++) {
-        struct OpcodeInfo info = OPCODE_INFO_VEC[i];
-        if (info.addr_mode != 0) {
-            printf("OP: %s ADDR: %d VAL: 0x%02x\n", op_names[info.op_type], info.addr_mode, i);
-        }
-    }
-    return 0;
-}
+//int main () {
+//    init_opcode_vec();
+//    for (int i = 0; i < 256; i++) {
+//        struct OpcodeInfo info = OPCODE_INFO_VEC[i];
+//        if (info.addr_mode != 0) {
+//            printf("OP: %s ADDR: %d VAL: 0x%02x\n", op_names[info.op_type], info.addr_mode, i);
+//        }
+//    }
+//    return 0;
+//}
