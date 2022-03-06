@@ -865,12 +865,126 @@ OpFunc op_vec[] = {
 };
 
 
-static inline void call0(struct OpcodeInfo *info) {
+static void serviceInterrupt(enum InterruptTypes interrupt) {
+    // Reset is a special case
+    if (interrupt == INT_IRQ && get_status_flag(STAT_IRQ_DISABLE)) {
+        return;
+    }
+    if (interrupt != INT_RESET) {
+        u_int8_t pc_lsb = PC & 0x0F;
+        u_int8_t pc_msb = (PC & 0xF0) << 8;
+        push_onto_stack(pc_msb);
+        push_onto_stack(pc_lsb);
+        push_onto_stack(STATUS);
+    }
+    else {
+        set_status_flag(STAT_IRQ_DISABLE, 1);
+        S = 0xFF;
+    }
+    PC = (*getMemoryPtr(interrupt+1) << 8) + *getMemoryPtr(interrupt);
+}
+
+static inline void call0(const struct OpcodeInfo *info) {
     op_vec[info->op_type]();
 }
 
-static inline void call1(struct OpcodeInfo *info, u_int8_t *mem) {
+static inline void call1(const struct OpcodeInfo *info, u_int8_t *mem) {
     op_vec[info->op_type](mem);
+}
+
+void initCPU() {
+    init_opcode_vec();
+    resetCPU();
+}
+
+void resetCPU() {
+    triggerInterrupt(INT_RESET);
+}
+
+void triggerInterrupt(enum InterruptTypes interrupt) {
+    current_interrupt = interrupt;
+}
+
+static void *runLoop() {
+    while (true) {
+        const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
+
+        switch (next_op->addr_mode) {
+            case ADDR_ACCUMULATOR:
+            case ADDR_IMPLIED:
+                call0(next_op);
+                PC += 1;
+                break;
+            case ADDR_IMMEDIATE:
+                call1(next_op, getMemoryPtr(PC + 1));
+                PC += 2;
+                break;
+            case ADDR_ABSOLUTE:
+                call1(next_op, getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1)));
+                PC += 3;
+                break;
+            case ADDR_ZERO_PAGE:
+                call1(next_op, getMemoryPtr(0x00 + *getMemoryPtr(PC + 1)));
+                PC += 2;
+                break;
+            case ADDR_INDEXED_ZERO_PAGE:
+                if (next_op->index == 'X') {
+                    call1(next_op, getMemoryPtr(0x00 + X + *getMemoryPtr(PC + 1)));
+                }
+                else {
+                    call1(next_op, getMemoryPtr(0x00 + Y + *getMemoryPtr(PC + 1)));
+                }
+                PC += 2;
+                break;
+            case ADDR_INDEX_ABSOLUTE:
+                if (next_op->index == 'X') {
+                    call1(next_op, getMemoryPtr(X + (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1)));
+                }
+                else {
+                    call1(next_op, getMemoryPtr(Y + (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1)));
+                }
+                PC += 3;
+                break;
+            case ADDR_RELATIVE:
+                assert(next_op->op_type == OP_BIF);
+                bif((const int8_t *)getMemoryPtr(PC + 1), next_op->branch_condition, next_op->branch_eq);
+                PC += 2;
+                break;
+            case ADDR_INDEXED_INDIRECT: {
+                assert(next_op->index == 'X');
+                u_int16_t indirect_addr = (*getMemoryPtr(X + *getMemoryPtr(PC + 1) + 1) << 8) + *getMemoryPtr(X + *getMemoryPtr(PC + 1));
+                call1(next_op, getMemoryPtr(indirect_addr));
+                PC += 2;
+                break;
+            }
+            case ADDR_INDIRECT_INDEXED: {
+                assert(next_op->index == 'Y');
+                u_int16_t indirect_addr = Y + (*getMemoryPtr(*getMemoryPtr(PC + 1) + 1) << 8) + *getMemoryPtr(*getMemoryPtr(PC + 1));
+                call1(next_op, getMemoryPtr(indirect_addr));
+                PC += 2;
+                break;
+            }
+            case ADDR_ABSOLUTE_INDIRECT: {
+                assert(next_op->op_type == OP_JMP);
+                u_int16_t indirect_addr = (*(getMemoryPtr(*getMemoryPtr(PC + 1)) + 1) << 8) + *(getMemoryPtr(*getMemoryPtr(PC + 1)));
+                jmp(&indirect_addr);
+                PC += 3;
+                break;
+            }
+            default:
+                assert(false);
+        }
+
+        if (current_interrupt != 0) {
+            serviceInterrupt(current_interrupt);
+            current_interrupt = 0;
+        }
+    }
+}
+
+void startCPUExecution() {
+    pthread_create(&cpu_run_thread, NULL, runLoop, NULL);
+    pthread_join(cpu_run_thread, NULL);
 }
 
 #include <stdio.h>
