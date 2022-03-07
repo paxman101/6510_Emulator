@@ -757,13 +757,10 @@ static void rts () {
 }
 
 static void rti () {
+    STATUS = pop_from_stack();
     u_int8_t low_byte = pop_from_stack();
     u_int8_t high_byte = pop_from_stack();
     u_int16_t addr = (high_byte << 8) + low_byte;
-    STATUS = addr;
-    low_byte = pop_from_stack();
-    high_byte = pop_from_stack();
-    addr = (high_byte << 8) + low_byte;
     PC = addr;
 }
 
@@ -924,7 +921,9 @@ static void *runLoop(void *aux) {
             case ADDR_ACCUMULATOR:
             case ADDR_IMPLIED:
                 call0(next_op);
-                PC += 1;
+                if (next_op->op_type != OP_RTI) {
+                    PC += 1;
+                }
                 break;
             case ADDR_IMMEDIATE:
                 call1(next_op, getMemoryPtr(PC + 1));
