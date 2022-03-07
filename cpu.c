@@ -186,9 +186,10 @@ static void init_opcode_vec() {
         for (bbb = 0; bbb < 8; bbb++) {
             u_int8_t instruction = (aaa << 5) + (bbb << 2) + cc;
 
+            bool is_valid = true;
             /* immediate STA is invalid */
             if (instruction == 0x89) {
-                break;
+                is_valid = false;
             }
 
             struct OpcodeInfo op_info;
@@ -254,7 +255,9 @@ static void init_opcode_vec() {
                 default:
                     assert(false);
             }
-            OPCODE_INFO_VEC[instruction] = op_info;
+            if (is_valid) {
+                OPCODE_INFO_VEC[instruction] = op_info;
+            }
         }
 
     }
