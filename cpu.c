@@ -536,16 +536,23 @@ static void sty(u_int8_t *mem) {
 /* Arithmetic operations */
 
 static void adc(const u_int8_t *mem) {
+    u_int8_t prev_a = A;
     A = A + *mem + get_status_flag(STAT_CARRY);
     set_status_flag(STAT_CARRY, A < *mem);
     set_zero_flag(A);
-    set_status_flag(STAT_OVERFLOW, (get_status_flag(STAT_NEGATIVE) == *mem >> 7) && (A >> 7 != *mem >> 7));
+    /* overflow from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
+    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (*mem ^ A) & 0x80));
     set_negative_flag(A);
 }
 
 static void sbc(const u_int8_t *mem) {
-    A = A - *mem - ~get_status_flag(STAT_CARRY);
-    // TODO: Status flags
+    /* formulas from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
+    u_int8_t prev_a = A;
+    A = A + ~(*mem) + get_status_flag(STAT_CARRY);
+    set_status_flag(STAT_CARRY, (int8_t)A >= 0);
+    set_zero_flag(A);
+    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (~(*mem) ^ A) & 0x80));
+    set_negative_flag(A);
 }
 
 /* Increment and decrement */
