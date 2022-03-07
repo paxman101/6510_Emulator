@@ -596,7 +596,7 @@ static void dey() {
 /* Shift and rotate */
 
 static void asl(u_int8_t *mem) {
-    bool carry = *mem & 0x8;
+    bool carry = *mem & 0x80;
     *mem = *mem << 1;
     set_negative_flag(*mem);
     set_zero_flag(*mem);
@@ -612,7 +612,7 @@ static void lsr(u_int8_t *mem) {
 }
 
 static void rol(u_int8_t *mem) {
-    bool carry = *mem & 0x8;
+    bool carry = *mem & 0x80;
     *mem = *mem << 1;
     changeBit(*mem, 0, get_status_flag(STAT_CARRY));
     set_negative_flag(*mem);
