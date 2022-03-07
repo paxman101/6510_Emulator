@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <pthread.h>
+#include <stdio.h>
 
 #include "memory.h"
 
@@ -104,15 +105,6 @@ char *op_names[] = {
        "OP_STA",
        "OP_LDA",
        "OP_CMP",
-       "OP_SBC",
-       "OP_ASL",
-       "OP_ROL",
-       "OP_LSR",
-       "OP_ROR",
-       "OP_STX",
-       "OP_LDX",
-       "OP_DEC",
-       "OP_INC",
        "OP_SBC",
        "OP_ASL",
        "OP_ROL",
@@ -488,16 +480,12 @@ static void init_opcode_vec() {
     OPCODE_INFO_VEC[0xEA] = op_info;
 }
 
-static void instruction_decode(u_int16_t instruction) {
-
-}
-
 static inline void set_negative_flag(u_int8_t reg_val) {
     set_status_flag(STAT_NEGATIVE, reg_val >> 7);
 }
 
 static inline void set_zero_flag(u_int8_t reg_val) {
-    set_status_flag(STAT_NEGATIVE, reg_val == 0);
+    set_status_flag(STAT_ZERO, reg_val == 0);
 }
 
 static inline void push_onto_stack(u_int8_t val) {
@@ -508,7 +496,7 @@ static inline void push_onto_stack(u_int8_t val) {
 
 static inline u_int8_t pop_from_stack() {
     S++;
-    return *getMemoryPtr(S);
+    return *getMemoryPtr(S + 0x100);
 }
 
 /* in order as shown on https://en.wikibooks.org/wiki/6502_Assembly */
@@ -677,7 +665,8 @@ static void cpy(const u_int8_t *mem) {
 static void bit(const u_int8_t *mem) {
     u_int8_t anded_val = A & *mem;
     set_status_flag(STAT_NEGATIVE, anded_val >> 7);
-    set_status_flag(STAT_OVERFLOW, anded_val >> 6);
+    set_status_flag(STAT_OVERFLOW, (anded_val & 0x40) >> 6);
+    set_zero_flag(anded_val);
 }
 
 static void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
@@ -728,14 +717,18 @@ static void pha() {
 
 static void pla() {
     A = pop_from_stack();
+    set_zero_flag(A);
+    set_negative_flag(A);
 }
 
 static void php() {
-    push_onto_stack(STATUS);
+    /* BRK flag is always set when STATUS is pushed */
+    push_onto_stack(STATUS | 0x10);
 }
 
 static void plp() {
-    STATUS = pop_from_stack();
+    /* Ignore BRK flag but always set 5th bit*/
+    STATUS = (pop_from_stack() & 0xEF) | 0x20;
 }
 
 /* Subroutines and jump */
@@ -744,9 +737,9 @@ static void jmp(const u_int16_t *mem) {
     PC = *mem;
 }
 
-static void jsr(const u_int8_t *mem) {
-    u_int8_t low_byte = (PC-1) & 0x0F;
-    u_int8_t high_byte = ((PC-1) & 0xF0) >> 8;
+static void jsr(const u_int16_t *mem) {
+    u_int8_t low_byte = (PC+2) & 0xFF;
+    u_int8_t high_byte = ((PC+2) & 0xFF00) >> 8;
     push_onto_stack(high_byte);
     push_onto_stack(low_byte);
     PC = *mem;
@@ -871,15 +864,22 @@ static void serviceInterrupt(enum InterruptTypes interrupt) {
         return;
     }
     if (interrupt != INT_RESET) {
-        u_int8_t pc_lsb = PC & 0x0F;
-        u_int8_t pc_msb = (PC & 0xF0) << 8;
+        u_int8_t pc_lsb = PC & 0x00FF;
+        u_int8_t pc_msb = (PC & 0xFF00) >> 8;
         push_onto_stack(pc_msb);
         push_onto_stack(pc_lsb);
         push_onto_stack(STATUS);
     }
     else {
+        // Zero out registers. This is not standard behavior on the actual 6502.
+        STATUS = 0;
+        X = 0;
+        Y = 0;
+        A = 0;
         set_status_flag(STAT_IRQ_DISABLE, 1);
-        S = 0xFF;
+        // set unused 5th bit which is always set
+        set_status_flag(5, 1);
+        S = 0xFD;
     }
     PC = (*getMemoryPtr(interrupt+1) << 8) + *getMemoryPtr(interrupt);
 }
@@ -905,9 +905,16 @@ void triggerInterrupt(enum InterruptTypes interrupt) {
     current_interrupt = interrupt;
 }
 
-static void *runLoop() {
+static void *runLoop(void *aux) {
+    FILE *log_stream = aux;
     while (true) {
+
         const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
+
+        if (log_stream) {
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X\n", PC, *getMemoryPtr(PC),
+                   A, X, Y, STATUS, S);
+        }
 
         switch (next_op->addr_mode) {
             case ADDR_ACCUMULATOR:
@@ -919,10 +926,14 @@ static void *runLoop() {
                 call1(next_op, getMemoryPtr(PC + 1));
                 PC += 2;
                 break;
-            case ADDR_ABSOLUTE:
-                call1(next_op, getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1)));
-                PC += 3;
+            case ADDR_ABSOLUTE: {
+                u_int16_t val = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
+                call1(next_op, (u_int8_t *) &val);
+                if (next_op->op_type != OP_JMP && next_op->op_type != OP_JSR) {
+                    PC += 3;
+                }
                 break;
+            }
             case ADDR_ZERO_PAGE:
                 call1(next_op, getMemoryPtr(0x00 + *getMemoryPtr(PC + 1)));
                 PC += 2;
@@ -982,12 +993,10 @@ static void *runLoop() {
     }
 }
 
-void startCPUExecution() {
-    pthread_create(&cpu_run_thread, NULL, runLoop, NULL);
+void startCPUExecution(FILE *log_stream) {
+    pthread_create(&cpu_run_thread, NULL, runLoop, log_stream);
     pthread_join(cpu_run_thread, NULL);
 }
-
-#include <stdio.h>
 
 //int main () {
 //    init_opcode_vec();

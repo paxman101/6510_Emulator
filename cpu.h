@@ -5,6 +5,8 @@
 #ifndef INC_6510_CPU_H
 #define INC_6510_CPU_H
 
+#include <stdio.h>
+
 /* Types of interrupts to be handled by the cpu.
  * The value of which corresponds to the LSB of each interrupt's respective interrupt vector */
 enum InterruptTypes {
@@ -19,6 +21,9 @@ void resetCPU();
 
 void triggerInterrupt(enum InterruptTypes interrupt);
 
-void startCPUExecution();
+/* Begins CPU execution in a new thread.
+ * If log_stream is not NULL, the cpu will print debug info to the given file
+ * each cycle. */
+void startCPUExecution(FILE *log_stream);
 
 #endif //INC_6510_CPU_H
