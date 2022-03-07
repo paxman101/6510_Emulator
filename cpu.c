@@ -932,9 +932,12 @@ static void *runLoop(void *aux) {
                 break;
             case ADDR_ABSOLUTE: {
                 u_int16_t val = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
-                call1(next_op, (u_int8_t *) &val);
                 if (next_op->op_type != OP_JMP && next_op->op_type != OP_JSR) {
+                    call1(next_op, getMemoryPtr(val));
                     PC += 3;
+                }
+                else {
+                    call1(next_op, (u_int8_t *) &val);
                 }
                 break;
             }
