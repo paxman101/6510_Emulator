@@ -986,7 +986,9 @@ static void *runLoop(void *aux) {
             }
             case ADDR_INDIRECT_INDEXED: {
                 assert(next_op->index == 'Y');
-                u_int16_t indirect_addr = Y + (*getMemoryPtr(*getMemoryPtr(PC + 1) + 1) << 8) + *getMemoryPtr(*getMemoryPtr(PC + 1));
+                u_int8_t low_byte = *getMemoryPtr((u_int8_t)(*getMemoryPtr(PC + 1)));
+                u_int8_t high_byte = *getMemoryPtr((u_int8_t)(*getMemoryPtr(PC + 1) + 1));
+                u_int16_t indirect_addr = Y + (high_byte << 8) + low_byte;
                 call1(next_op, getMemoryPtr(indirect_addr));
                 PC += 2;
                 break;
