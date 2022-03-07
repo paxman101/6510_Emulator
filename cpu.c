@@ -757,7 +757,8 @@ static void rts () {
 }
 
 static void rti () {
-    STATUS = pop_from_stack();
+    /* Make sure 5th bit is always set */
+    STATUS = pop_from_stack() | 0x20;
     u_int8_t low_byte = pop_from_stack();
     u_int8_t high_byte = pop_from_stack();
     u_int16_t addr = (high_byte << 8) + low_byte;
