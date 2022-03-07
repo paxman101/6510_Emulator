@@ -920,6 +920,9 @@ static void *runLoop(void *aux) {
 
         switch (next_op->addr_mode) {
             case ADDR_ACCUMULATOR:
+                call1(next_op, &A);
+                PC += 1;
+                break;
             case ADDR_IMPLIED:
                 call0(next_op);
                 if (next_op->op_type != OP_RTI) {
