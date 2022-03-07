@@ -713,8 +713,6 @@ static void tsx() {
 
 static void txs() {
     S = X;
-    set_negative_flag(X);
-    set_zero_flag(X);
 }
 
 static void pha() {
