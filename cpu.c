@@ -663,10 +663,9 @@ static void cpy(const u_int8_t *mem) {
 }
 
 static void bit(const u_int8_t *mem) {
-    u_int8_t anded_val = A & *mem;
-    set_status_flag(STAT_NEGATIVE, anded_val >> 7);
-    set_status_flag(STAT_OVERFLOW, (anded_val & 0x40) >> 6);
-    set_zero_flag(anded_val);
+    set_status_flag(STAT_NEGATIVE, *mem >> 7);
+    set_status_flag(STAT_OVERFLOW, (*mem & 0x40) >> 6);
+    set_zero_flag(A & *mem);
 }
 
 static void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
