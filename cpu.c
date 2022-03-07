@@ -579,7 +579,7 @@ static void iny() {
 }
 
 static void dec(u_int8_t *mem) {
-    (*mem)++;
+    (*mem)--;
     set_negative_flag(*mem);
     set_zero_flag(*mem);
 }
