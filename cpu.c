@@ -645,19 +645,19 @@ static void eor(const u_int8_t *mem) {
 /* Compare and test bit */
 
 static void cmp(const u_int8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, A < *mem);
+    set_status_flag(STAT_NEGATIVE, (A - *mem) >> 7);
     set_status_flag(STAT_ZERO, A == *mem);
     set_status_flag(STAT_CARRY, A >= *mem);
 }
 
 static void cpx(const u_int8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, X < *mem);
+    set_status_flag(STAT_NEGATIVE, (X - *mem) >> 7 );
     set_status_flag(STAT_ZERO, X == *mem);
     set_status_flag(STAT_CARRY, X >= *mem);
 }
 
 static void cpy(const u_int8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, Y < *mem);
+    set_status_flag(STAT_NEGATIVE, (Y - *mem) >> 7);
     set_status_flag(STAT_ZERO, Y == *mem);
     set_status_flag(STAT_CARRY, Y >= *mem);
 }
