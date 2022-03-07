@@ -240,6 +240,7 @@ static void init_opcode_vec() {
                 case 4:
                     op_info.addr_mode = ADDR_INDIRECT_INDEXED;
                     op_info.index = 'Y';
+                    break;
                 case 5:
                     op_info.addr_mode = ADDR_INDEXED_ZERO_PAGE;
                     op_info.index = 'X';
