@@ -954,10 +954,10 @@ static void *runLoop(void *aux) {
                 break;
             case ADDR_INDEXED_ZERO_PAGE:
                 if (next_op->index == 'X') {
-                    call1(next_op, getMemoryPtr(0x00 + X + *getMemoryPtr(PC + 1)));
+                    call1(next_op, getMemoryPtr((u_int8_t)(X + *getMemoryPtr(PC + 1))));
                 }
                 else {
-                    call1(next_op, getMemoryPtr(0x00 + Y + *getMemoryPtr(PC + 1)));
+                    call1(next_op, getMemoryPtr((u_int8_t)(Y + *getMemoryPtr(PC + 1))));
                 }
                 PC += 2;
                 break;
