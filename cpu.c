@@ -995,9 +995,10 @@ static void *runLoop(void *aux) {
             }
             case ADDR_ABSOLUTE_INDIRECT: {
                 assert(next_op->op_type == OP_JMP);
-                u_int16_t indirect_addr = (*(getMemoryPtr(*getMemoryPtr(PC + 1)) + 1) << 8) + *(getMemoryPtr(*getMemoryPtr(PC + 1)));
+                u_int8_t low_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1));
+                u_int8_t high_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + (u_int8_t)(*getMemoryPtr(PC + 1) + 1));
+                u_int16_t indirect_addr = (high_byte << 8) + low_byte;
                 jmp(&indirect_addr);
-                PC += 3;
                 break;
             }
             default:
