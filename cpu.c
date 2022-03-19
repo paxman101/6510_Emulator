@@ -23,6 +23,8 @@ static u_int8_t  X;         /* X index */
 static u_int8_t  Y;         /* Y index */
 static u_int8_t  S;         /* stack point */
 
+static u_int64_t cycles;
+
 static enum InterruptTypes current_interrupt = 0;
 pthread_t cpu_run_thread;
 
@@ -43,6 +45,11 @@ static inline bool get_status_flag(enum StatusFlag flag) {
 
 static inline void set_status_flag(enum StatusFlag flag, bool val) {
     changeBit(STATUS, flag, val);
+}
+
+// checks if the two given addresses are on different pages
+static inline bool crossed_boundary(u_int16_t addr1, u_int16_t addr2) {
+    return (addr1 >> 8) != (addr2 >> 8);
 }
 
 enum Operation {
@@ -169,6 +176,8 @@ struct OpcodeInfo {
     char index;                        /* Which index A or B to use for indexed operations. X = 'X', Y = 'Y'. */
     enum StatusFlag branch_condition;  /* Flag used for OP_BIF */
     bool branch_eq;                    /* bool for OP_BIF. true if we should branch when branch_condition is 1 and vice versa */
+    u_int8_t num_cycles;
+    bool extra_cycle_if_cross;         /* true when the instruction takes an extra cycle on page boundary cross */
 };
 
 static struct OpcodeInfo OPCODE_INFO_VEC[256];
@@ -482,6 +491,291 @@ static void init_opcode_vec() {
     OPCODE_INFO_VEC[0xCA] = op_info;
     op_info.op_type = OP_NOP;
     OPCODE_INFO_VEC[0xEA] = op_info;
+    /* set cycle count for each instruction */
+    OPCODE_INFO_VEC[0x00].num_cycles = 7;
+    OPCODE_INFO_VEC[0x01].num_cycles = 6;
+    OPCODE_INFO_VEC[0x05].num_cycles = 3;
+    OPCODE_INFO_VEC[0x06].num_cycles = 5;
+    OPCODE_INFO_VEC[0x08].num_cycles = 3;
+    OPCODE_INFO_VEC[0x09].num_cycles = 2;
+    OPCODE_INFO_VEC[0x0A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x0D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x0E].num_cycles = 6;
+    OPCODE_INFO_VEC[0x10].num_cycles = 2;
+    OPCODE_INFO_VEC[0x10].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x11].num_cycles = 5;
+    OPCODE_INFO_VEC[0x11].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x15].num_cycles = 4;
+    OPCODE_INFO_VEC[0x16].num_cycles = 6;
+    OPCODE_INFO_VEC[0x18].num_cycles = 2;
+    OPCODE_INFO_VEC[0x19].num_cycles = 4;
+    OPCODE_INFO_VEC[0x19].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x1D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x1D].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x1E].num_cycles = 7;
+    OPCODE_INFO_VEC[0x20].num_cycles = 6;
+    OPCODE_INFO_VEC[0x21].num_cycles = 6;
+    OPCODE_INFO_VEC[0x24].num_cycles = 3;
+    OPCODE_INFO_VEC[0x25].num_cycles = 3;
+    OPCODE_INFO_VEC[0x26].num_cycles = 5;
+    OPCODE_INFO_VEC[0x28].num_cycles = 4;
+    OPCODE_INFO_VEC[0x29].num_cycles = 2;
+    OPCODE_INFO_VEC[0x2A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x2C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x2D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x2E].num_cycles = 6;
+    OPCODE_INFO_VEC[0x30].num_cycles = 2;
+    OPCODE_INFO_VEC[0x30].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x31].num_cycles = 5;
+    OPCODE_INFO_VEC[0x31].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x35].num_cycles = 4;
+    OPCODE_INFO_VEC[0x36].num_cycles = 6;
+    OPCODE_INFO_VEC[0x38].num_cycles = 2;
+    OPCODE_INFO_VEC[0x39].num_cycles = 4;
+    OPCODE_INFO_VEC[0x39].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x3D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x3D].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x3E].num_cycles = 7;
+    OPCODE_INFO_VEC[0x40].num_cycles = 6;
+    OPCODE_INFO_VEC[0x41].num_cycles = 6;
+    OPCODE_INFO_VEC[0x45].num_cycles = 3;
+    OPCODE_INFO_VEC[0x46].num_cycles = 5;
+    OPCODE_INFO_VEC[0x48].num_cycles = 3;
+    OPCODE_INFO_VEC[0x49].num_cycles = 2;
+    OPCODE_INFO_VEC[0x4A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x4C].num_cycles = 3;
+    OPCODE_INFO_VEC[0x4D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x4E].num_cycles = 6;
+    OPCODE_INFO_VEC[0x50].num_cycles = 2;
+    OPCODE_INFO_VEC[0x50].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x51].num_cycles = 5;
+    OPCODE_INFO_VEC[0x51].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x55].num_cycles = 4;
+    OPCODE_INFO_VEC[0x56].num_cycles = 6;
+    OPCODE_INFO_VEC[0x58].num_cycles = 2;
+    OPCODE_INFO_VEC[0x59].num_cycles = 4;
+    OPCODE_INFO_VEC[0x59].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x5D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x5D].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x5E].num_cycles = 7;
+    OPCODE_INFO_VEC[0x60].num_cycles = 6;
+    OPCODE_INFO_VEC[0x61].num_cycles = 6;
+    OPCODE_INFO_VEC[0x65].num_cycles = 3;
+    OPCODE_INFO_VEC[0x66].num_cycles = 5;
+    OPCODE_INFO_VEC[0x68].num_cycles = 4;
+    OPCODE_INFO_VEC[0x69].num_cycles = 2;
+    OPCODE_INFO_VEC[0x6A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x6C].num_cycles = 5;
+    OPCODE_INFO_VEC[0x6D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x6E].num_cycles = 6;
+    OPCODE_INFO_VEC[0x70].num_cycles = 2;
+    OPCODE_INFO_VEC[0x70].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x71].num_cycles = 5;
+    OPCODE_INFO_VEC[0x71].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x75].num_cycles = 4;
+    OPCODE_INFO_VEC[0x76].num_cycles = 6;
+    OPCODE_INFO_VEC[0x78].num_cycles = 2;
+    OPCODE_INFO_VEC[0x79].num_cycles = 4;
+    OPCODE_INFO_VEC[0x79].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x7D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x7D].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x7E].num_cycles = 7;
+    OPCODE_INFO_VEC[0x81].num_cycles = 6;
+    OPCODE_INFO_VEC[0x84].num_cycles = 3;
+    OPCODE_INFO_VEC[0x85].num_cycles = 3;
+    OPCODE_INFO_VEC[0x86].num_cycles = 3;
+    OPCODE_INFO_VEC[0x88].num_cycles = 2;
+    OPCODE_INFO_VEC[0x8A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x8C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x8D].num_cycles = 4;
+    OPCODE_INFO_VEC[0x8E].num_cycles = 4;
+    OPCODE_INFO_VEC[0x90].num_cycles = 2;
+    OPCODE_INFO_VEC[0x90].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x91].num_cycles = 6;
+    OPCODE_INFO_VEC[0x94].num_cycles = 4;
+    OPCODE_INFO_VEC[0x95].num_cycles = 4;
+    OPCODE_INFO_VEC[0x96].num_cycles = 4;
+    OPCODE_INFO_VEC[0x98].num_cycles = 2;
+    OPCODE_INFO_VEC[0x99].num_cycles = 5;
+    OPCODE_INFO_VEC[0x9A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x9D].num_cycles = 5;
+    OPCODE_INFO_VEC[0xA0].num_cycles = 2;
+    OPCODE_INFO_VEC[0xA1].num_cycles = 6;
+    OPCODE_INFO_VEC[0xA2].num_cycles = 2;
+    OPCODE_INFO_VEC[0xA4].num_cycles = 3;
+    OPCODE_INFO_VEC[0xA5].num_cycles = 3;
+    OPCODE_INFO_VEC[0xA6].num_cycles = 3;
+    OPCODE_INFO_VEC[0xA8].num_cycles = 2;
+    OPCODE_INFO_VEC[0xA9].num_cycles = 2;
+    OPCODE_INFO_VEC[0xAA].num_cycles = 2;
+    OPCODE_INFO_VEC[0xAC].num_cycles = 4;
+    OPCODE_INFO_VEC[0xAD].num_cycles = 4;
+    OPCODE_INFO_VEC[0xAE].num_cycles = 4;
+    OPCODE_INFO_VEC[0xB0].num_cycles = 2;
+    OPCODE_INFO_VEC[0xB0].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xB1].num_cycles = 5;
+    OPCODE_INFO_VEC[0xB1].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xB4].num_cycles = 4;
+    OPCODE_INFO_VEC[0xB5].num_cycles = 4;
+    OPCODE_INFO_VEC[0xB6].num_cycles = 4;
+    OPCODE_INFO_VEC[0xB8].num_cycles = 2;
+    OPCODE_INFO_VEC[0xB9].num_cycles = 4;
+    OPCODE_INFO_VEC[0xB9].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xBA].num_cycles = 2;
+    OPCODE_INFO_VEC[0xBC].num_cycles = 4;
+    OPCODE_INFO_VEC[0xBC].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xBD].num_cycles = 4;
+    OPCODE_INFO_VEC[0xBD].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xBE].num_cycles = 4;
+    OPCODE_INFO_VEC[0xBE].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xC0].num_cycles = 2;
+    OPCODE_INFO_VEC[0xC1].num_cycles = 6;
+    OPCODE_INFO_VEC[0xC4].num_cycles = 3;
+    OPCODE_INFO_VEC[0xC5].num_cycles = 3;
+    OPCODE_INFO_VEC[0xC6].num_cycles = 5;
+    OPCODE_INFO_VEC[0xC8].num_cycles = 2;
+    OPCODE_INFO_VEC[0xC9].num_cycles = 2;
+    OPCODE_INFO_VEC[0xCA].num_cycles = 2;
+    OPCODE_INFO_VEC[0xCC].num_cycles = 4;
+    OPCODE_INFO_VEC[0xCD].num_cycles = 4;
+    OPCODE_INFO_VEC[0xCE].num_cycles = 6;
+    OPCODE_INFO_VEC[0xD0].num_cycles = 2;
+    OPCODE_INFO_VEC[0xD0].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xD1].num_cycles = 5;
+    OPCODE_INFO_VEC[0xD1].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xD5].num_cycles = 4;
+    OPCODE_INFO_VEC[0xD6].num_cycles = 6;
+    OPCODE_INFO_VEC[0xD8].num_cycles = 2;
+    OPCODE_INFO_VEC[0xD9].num_cycles = 4;
+    OPCODE_INFO_VEC[0xD9].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xDD].num_cycles = 4;
+    OPCODE_INFO_VEC[0xDD].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xDE].num_cycles = 7;
+    OPCODE_INFO_VEC[0xE0].num_cycles = 2;
+    OPCODE_INFO_VEC[0xE1].num_cycles = 6;
+    OPCODE_INFO_VEC[0xE4].num_cycles = 3;
+    OPCODE_INFO_VEC[0xE5].num_cycles = 3;
+    OPCODE_INFO_VEC[0xE6].num_cycles = 5;
+    OPCODE_INFO_VEC[0xE8].num_cycles = 2;
+    OPCODE_INFO_VEC[0xE9].num_cycles = 2;
+    OPCODE_INFO_VEC[0xEA].num_cycles = 2;
+    OPCODE_INFO_VEC[0xEC].num_cycles = 4;
+    OPCODE_INFO_VEC[0xED].num_cycles = 4;
+    OPCODE_INFO_VEC[0xEE].num_cycles = 6;
+    OPCODE_INFO_VEC[0xF0].num_cycles = 2;
+    OPCODE_INFO_VEC[0xF0].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xF1].num_cycles = 5;
+    OPCODE_INFO_VEC[0xF1].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xF5].num_cycles = 4;
+    OPCODE_INFO_VEC[0xF6].num_cycles = 6;
+    OPCODE_INFO_VEC[0xF8].num_cycles = 2;
+    OPCODE_INFO_VEC[0xF9].num_cycles = 4;
+    OPCODE_INFO_VEC[0xF9].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xFD].num_cycles = 4;
+    OPCODE_INFO_VEC[0xFD].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xFE].num_cycles = 7;
+    OPCODE_INFO_VEC[0x03].num_cycles = 8;
+    OPCODE_INFO_VEC[0x04].num_cycles = 3;
+    OPCODE_INFO_VEC[0x07].num_cycles = 5;
+    OPCODE_INFO_VEC[0x0B].num_cycles = 2;
+    OPCODE_INFO_VEC[0x0C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x0F].num_cycles = 6;
+    OPCODE_INFO_VEC[0x13].num_cycles = 8;
+    OPCODE_INFO_VEC[0x14].num_cycles = 4;
+    OPCODE_INFO_VEC[0x17].num_cycles = 6;
+    OPCODE_INFO_VEC[0x1A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x1B].num_cycles = 7;
+    OPCODE_INFO_VEC[0x1C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x1C].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x1F].num_cycles = 7;
+    OPCODE_INFO_VEC[0x23].num_cycles = 8;
+    OPCODE_INFO_VEC[0x27].num_cycles = 5;
+    OPCODE_INFO_VEC[0x2B].num_cycles = 2;
+    OPCODE_INFO_VEC[0x2F].num_cycles = 6;
+    OPCODE_INFO_VEC[0x33].num_cycles = 8;
+    OPCODE_INFO_VEC[0x34].num_cycles = 4;
+    OPCODE_INFO_VEC[0x37].num_cycles = 6;
+    OPCODE_INFO_VEC[0x3A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x3B].num_cycles = 7;
+    OPCODE_INFO_VEC[0x3C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x3C].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x3F].num_cycles = 7;
+    OPCODE_INFO_VEC[0x43].num_cycles = 8;
+    OPCODE_INFO_VEC[0x44].num_cycles = 3;
+    OPCODE_INFO_VEC[0x47].num_cycles = 5;
+    OPCODE_INFO_VEC[0x4B].num_cycles = 2;
+    OPCODE_INFO_VEC[0x4F].num_cycles = 6;
+    OPCODE_INFO_VEC[0x53].num_cycles = 8;
+    OPCODE_INFO_VEC[0x54].num_cycles = 4;
+    OPCODE_INFO_VEC[0x57].num_cycles = 6;
+    OPCODE_INFO_VEC[0x5A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x5B].num_cycles = 7;
+    OPCODE_INFO_VEC[0x5C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x5C].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x5F].num_cycles = 7;
+    OPCODE_INFO_VEC[0x63].num_cycles = 8;
+    OPCODE_INFO_VEC[0x64].num_cycles = 3;
+    OPCODE_INFO_VEC[0x67].num_cycles = 5;
+    OPCODE_INFO_VEC[0x6B].num_cycles = 2;
+    OPCODE_INFO_VEC[0x6F].num_cycles = 6;
+    OPCODE_INFO_VEC[0x73].num_cycles = 8;
+    OPCODE_INFO_VEC[0x74].num_cycles = 4;
+    OPCODE_INFO_VEC[0x77].num_cycles = 6;
+    OPCODE_INFO_VEC[0x7A].num_cycles = 2;
+    OPCODE_INFO_VEC[0x7B].num_cycles = 7;
+    OPCODE_INFO_VEC[0x7C].num_cycles = 4;
+    OPCODE_INFO_VEC[0x7C].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0x7F].num_cycles = 7;
+    OPCODE_INFO_VEC[0x80].num_cycles = 2;
+    OPCODE_INFO_VEC[0x82].num_cycles = 2;
+    OPCODE_INFO_VEC[0x83].num_cycles = 6;
+    OPCODE_INFO_VEC[0x87].num_cycles = 3;
+    OPCODE_INFO_VEC[0x89].num_cycles = 2;
+    OPCODE_INFO_VEC[0x8B].num_cycles = 2;
+    OPCODE_INFO_VEC[0x8F].num_cycles = 4;
+    OPCODE_INFO_VEC[0x93].num_cycles = 6;
+    OPCODE_INFO_VEC[0x97].num_cycles = 4;
+    OPCODE_INFO_VEC[0x9B].num_cycles = 5;
+    OPCODE_INFO_VEC[0x9C].num_cycles = 5;
+    OPCODE_INFO_VEC[0x9E].num_cycles = 5;
+    OPCODE_INFO_VEC[0x9F].num_cycles = 5;
+    OPCODE_INFO_VEC[0xA3].num_cycles = 6;
+    OPCODE_INFO_VEC[0xA7].num_cycles = 3;
+    OPCODE_INFO_VEC[0xAB].num_cycles = 2;
+    OPCODE_INFO_VEC[0xAF].num_cycles = 4;
+    OPCODE_INFO_VEC[0xB3].num_cycles = 5;
+    OPCODE_INFO_VEC[0xB3].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xB7].num_cycles = 4;
+    OPCODE_INFO_VEC[0xBB].num_cycles = 4;
+    OPCODE_INFO_VEC[0xBB].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xBF].num_cycles = 4;
+    OPCODE_INFO_VEC[0xBF].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xC2].num_cycles = 2;
+    OPCODE_INFO_VEC[0xC3].num_cycles = 8;
+    OPCODE_INFO_VEC[0xC7].num_cycles = 5;
+    OPCODE_INFO_VEC[0xCB].num_cycles = 2;
+    OPCODE_INFO_VEC[0xCF].num_cycles = 6;
+    OPCODE_INFO_VEC[0xD3].num_cycles = 8;
+    OPCODE_INFO_VEC[0xD4].num_cycles = 4;
+    OPCODE_INFO_VEC[0xD7].num_cycles = 6;
+    OPCODE_INFO_VEC[0xDA].num_cycles = 2;
+    OPCODE_INFO_VEC[0xDB].num_cycles = 7;
+    OPCODE_INFO_VEC[0xDC].num_cycles = 4;
+    OPCODE_INFO_VEC[0xDC].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xDF].num_cycles = 7;
+    OPCODE_INFO_VEC[0xE2].num_cycles = 2;
+    OPCODE_INFO_VEC[0xE3].num_cycles = 8;
+    OPCODE_INFO_VEC[0xE7].num_cycles = 5;
+    OPCODE_INFO_VEC[0xEB].num_cycles = 2;
+    OPCODE_INFO_VEC[0xEF].num_cycles = 6;
+    OPCODE_INFO_VEC[0xF3].num_cycles = 8;
+    OPCODE_INFO_VEC[0xF4].num_cycles = 4;
+    OPCODE_INFO_VEC[0xF7].num_cycles = 6;
+    OPCODE_INFO_VEC[0xFA].num_cycles = 2;
+    OPCODE_INFO_VEC[0xFB].num_cycles = 7;
+    OPCODE_INFO_VEC[0xFC].num_cycles = 4;
+    OPCODE_INFO_VEC[0xFC].extra_cycle_if_cross = true;
+    OPCODE_INFO_VEC[0xFF].num_cycles = 7;
 }
 
 static inline void set_negative_flag(u_int8_t reg_val) {
@@ -681,7 +975,10 @@ static void bit(const u_int8_t *mem) {
 
 static void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
     if (get_status_flag(flag) == branch_eq) {
+        u_int16_t old_pc = PC;
         PC += *mem;
+        // more cycles are taken on page cross and when the branch is taken
+        cycles += crossed_boundary(old_pc+2, PC) ? 2 : 1;
     }
 }
 
@@ -882,6 +1179,7 @@ static void serviceInterrupt(enum InterruptTypes interrupt) {
         X = 0;
         Y = 0;
         A = 0;
+        cycles = 7;
         set_status_flag(STAT_IRQ_DISABLE, 1);
         // set unused 5th bit which is always set
         set_status_flag(5, 1);
@@ -914,12 +1212,12 @@ void triggerInterrupt(enum InterruptTypes interrupt) {
 static void *runLoop(void *aux) {
     FILE *log_stream = aux;
     while (true) {
-
         const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
+        u_int64_t start_cycle = cycles;
 
         if (log_stream) {
-            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X\n", PC, *getMemoryPtr(PC),
-                   A, X, Y, STATUS, S);
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", PC, *getMemoryPtr(PC),
+                   A, X, Y, STATUS, S, cycles);
         }
 
         switch (next_op->addr_mode) {
@@ -961,15 +1259,16 @@ static void *runLoop(void *aux) {
                 }
                 PC += 2;
                 break;
-            case ADDR_INDEX_ABSOLUTE:
-                if (next_op->index == 'X') {
-                    call1(next_op, getMemoryPtr(X + (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1)));
-                }
-                else {
-                    call1(next_op, getMemoryPtr(Y + (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1)));
+            case ADDR_INDEX_ABSOLUTE: {
+                u_int16_t abs_addr = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
+                u_int16_t indexed_addr = abs_addr + (next_op->index == 'X' ? X : Y);
+                call1(next_op, getMemoryPtr(indexed_addr));
+                if (next_op->extra_cycle_if_cross && crossed_boundary(abs_addr, indexed_addr)) {
+                    cycles++;
                 }
                 PC += 3;
                 break;
+            }
             case ADDR_RELATIVE:
                 assert(next_op->op_type == OP_BIF);
                 bif((const int8_t *)getMemoryPtr(PC + 1), next_op->branch_condition, next_op->branch_eq);
@@ -988,8 +1287,12 @@ static void *runLoop(void *aux) {
                 assert(next_op->index == 'Y');
                 u_int8_t low_byte = *getMemoryPtr((u_int8_t)(*getMemoryPtr(PC + 1)));
                 u_int8_t high_byte = *getMemoryPtr((u_int8_t)(*getMemoryPtr(PC + 1) + 1));
-                u_int16_t indirect_addr = Y + (high_byte << 8) + low_byte;
-                call1(next_op, getMemoryPtr(indirect_addr));
+                u_int16_t indirect_addr = (high_byte << 8) + low_byte;
+                u_int16_t indirect_indexed_addr = Y + indirect_addr;
+                call1(next_op, getMemoryPtr(indirect_indexed_addr));
+                if (next_op->extra_cycle_if_cross && crossed_boundary(indirect_addr, indirect_indexed_addr)) {
+                    cycles++;
+                }
                 PC += 2;
                 break;
             }
@@ -1004,6 +1307,7 @@ static void *runLoop(void *aux) {
             default:
                 assert(false);
         }
+        cycles += next_op->num_cycles;
 
         if (current_interrupt != 0) {
             serviceInterrupt(current_interrupt);
