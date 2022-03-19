@@ -1216,7 +1216,7 @@ static void *runLoop(void *aux) {
         u_int64_t start_cycle = cycles;
 
         if (log_stream) {
-            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", PC, *getMemoryPtr(PC),
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%lu\n", PC, *getMemoryPtr(PC),
                    A, X, Y, STATUS, S, cycles);
         }
 
