@@ -7,16 +7,13 @@
 
 #include <stdlib.h>
 
-void initMemory(u_int16_t size);
+typedef u_int8_t *(*GetMemoryFunc)(u_int16_t address);
 
-/* Blank all memory with zeroes */
-void clearMemory();
-
-/* Dealloc memory */
-void freeMemory();
+/* Define function that will access the memory with func. */
+void initMemory(GetMemoryFunc func);
 
 /* Returns pointer to the memory at the given address */
-u_int8_t *getMemoryPtr(u_int16_t address);
+inline u_int8_t *getMemoryPtr(u_int16_t address);
 
 void loadBinFile(const char *path, u_int16_t mem_offset, long file_offset, u_int16_t bytes_to_read);
 

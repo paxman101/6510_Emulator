@@ -4,33 +4,17 @@
 
 #include "memory.h"
 
-#include <assert.h>
 #include <string.h>
 #include <stdio.h>
 
-static u_int8_t *memory_contents = NULL;
-static u_int16_t mem_size;
+static GetMemoryFunc get_memory_func;
 
-void initMemory(u_int16_t size) {
-    assert(memory_contents == NULL);
-    memory_contents = malloc(size);
-    mem_size = size;
+void initMemory(GetMemoryFunc func) {
+    get_memory_func = func;
 }
 
-void clearMemory() {
-    assert(memory_contents != NULL);
-    memset(memory_contents, 0, mem_size);
-}
-
-void freeMemory() {
-    assert(memory_contents != NULL);
-    free(memory_contents);
-}
-
-u_int8_t *getMemoryPtr(u_int16_t address) {
-    assert(memory_contents != NULL);
-    assert(address <= mem_size);
-    return &memory_contents[address];
+inline u_int8_t *getMemoryPtr(u_int16_t address) {
+    return get_memory_func(address);
 }
 
 void loadBinFile(const char *path, u_int16_t offset, long file_offset, u_int16_t bytes_to_read) {
@@ -49,7 +33,7 @@ void loadBinFile(const char *path, u_int16_t offset, long file_offset, u_int16_t
 
     int loc = 0;
     while ((in = getc(bin_file)) != EOF && loc < bytes_to_read) {
-        memory_contents[offset + loc++] = in;
+        *getMemoryPtr(offset + loc++) = in;
     }
 
     fclose(bin_file);
