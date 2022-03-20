@@ -15,7 +15,10 @@ int main() {
 
     initCPU();
     FILE *fs = fopen("testing/testnes.log", "w");
-    startCPUExecution(fs);
+    setCPUFreq(100000);
+//    startCPUExecution(stdout);
+
+    while (!feof(stdin));
     fclose(fs);
 
     return 0;
