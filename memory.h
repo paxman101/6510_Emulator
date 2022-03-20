@@ -5,16 +5,16 @@
 #ifndef INC_6510_MEMORY_H
 #define INC_6510_MEMORY_H
 
-#include <stdlib.h>
+#include <stdint.h>
 
-typedef u_int8_t *(*GetMemoryFunc)(u_int16_t address);
+typedef uint8_t *(*GetMemoryFunc)(uint16_t address);
 
 /* Define function that will access the memory with func. */
 void initMemory(GetMemoryFunc func);
 
 /* Returns pointer to the memory at the given address */
-u_int8_t *getMemoryPtr(u_int16_t address);
+uint8_t *getMemoryPtr(uint16_t address);
 
-void loadBinFile(const char *path, u_int16_t mem_offset, long file_offset, u_int16_t bytes_to_read);
+void loadBinFile(const char *path, uint16_t mem_offset, long file_offset, uint16_t bytes_to_read);
 
 #endif //INC_6510_MEMORY_H

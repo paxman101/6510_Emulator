@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static GetMemoryFunc get_memory_func;
 
@@ -13,11 +14,11 @@ void initMemory(GetMemoryFunc func) {
     get_memory_func = func;
 }
 
-u_int8_t *getMemoryPtr(u_int16_t address) {
+uint8_t *getMemoryPtr(uint16_t address) {
     return get_memory_func(address);
 }
 
-void loadBinFile(const char *path, u_int16_t offset, long file_offset, u_int16_t bytes_to_read) {
+void loadBinFile(const char *path, uint16_t offset, long file_offset, uint16_t bytes_to_read) {
     FILE *bin_file = fopen(path, "rb");
 
     if (bin_file == NULL) {

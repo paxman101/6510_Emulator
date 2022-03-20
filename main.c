@@ -9,7 +9,7 @@ int main() {
     loadBinFile("testing/nestest.nes", 0x8000, 0x0010, 0x4000);
     loadBinFile("testing/nestest.nes", 0xC000, 0x0010, 0x4000);
 
-    u_int8_t *mem = getMemoryPtr(INT_RESET+1);
+    uint8_t *mem = getMemoryPtr(INT_RESET+1);
     *mem = 0xC0;
     *(mem - 1) = 0x00;
 

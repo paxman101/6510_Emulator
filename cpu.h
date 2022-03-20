@@ -5,7 +5,7 @@
 #ifndef INC_6510_CPU_H
 #define INC_6510_CPU_H
 
-#include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 typedef void (*SleepFunction)(double time_to_sleep);
@@ -41,6 +41,6 @@ void stopCPUExecution();
 void setSleepFunction(SleepFunction func);
 
 /* Set emulated CPU freq to freq given in Hz. */
-void setCPUFreq(u_int32_t freq);
+void setCPUFreq(uint32_t freq);
 
 #endif //INC_6510_CPU_H

@@ -16,15 +16,15 @@
 #define changeBit(num, n, val) ((num) = (num) & ~(1UL << (n)) | ((val) << (n)))
 
 /* 6510 Registers (https://www.c64-wiki.com/wiki/CPU_6510-Register_set) */
-static u_int16_t PC;
-static u_int8_t  STATUS;
-static u_int8_t  A;         /* accumulator */
-static u_int8_t  X;         /* X index */
-static u_int8_t  Y;         /* Y index */
-static u_int8_t  S;         /* stack point */
+static uint16_t PC;
+static uint8_t  STATUS;
+static uint8_t  A;         /* accumulator */
+static uint8_t  X;         /* X index */
+static uint8_t  Y;         /* Y index */
+static uint8_t  S;         /* stack point */
 
-static u_int64_t cycles;
-static u_int32_t cpu_freq;  /* CPU freq to emulate in hz. */
+static uint64_t cycles;
+static uint32_t cpu_freq;  /* CPU freq to emulate in hz. */
 
 static enum InterruptTypes current_interrupt = 0;
 static SleepFunction sleep_func = NULL;
@@ -49,7 +49,7 @@ static inline void set_status_flag(enum StatusFlag flag, bool val) {
 }
 
 // checks if the two given addresses are on different pages
-static inline bool crossed_boundary(u_int16_t addr1, u_int16_t addr2) {
+static inline bool crossed_boundary(uint16_t addr1, uint16_t addr2) {
     return (addr1 >> 8) != (addr2 >> 8);
 }
 
@@ -177,7 +177,7 @@ struct OpcodeInfo {
     char index;                        /* Which index A or B to use for indexed operations. X = 'X', Y = 'Y'. */
     enum StatusFlag branch_condition;  /* Flag used for OP_BIF */
     bool branch_eq;                    /* bool for OP_BIF. true if we should branch when branch_condition is 1 and vice versa */
-    u_int8_t num_cycles;
+    uint8_t num_cycles;
     bool extra_cycle_if_cross;         /* true when the instruction takes an extra cycle on page boundary cross */
 };
 
@@ -186,15 +186,15 @@ static struct OpcodeInfo OPCODE_INFO_VEC[256];
 /* https://llx.com/Neil/a2/opcodes.html */
 static void init_opcode_vec() {
     /* Bit pattern aaabbbcc */
-    u_int8_t aaa;
-    u_int8_t bbb;
-    u_int8_t cc;
+    uint8_t aaa;
+    uint8_t bbb;
+    uint8_t cc;
 
     /* cc = 1 case */
     cc = 1;
     for (aaa = 0; aaa < 8; aaa++) {
         for (bbb = 0; bbb < 8; bbb++) {
-            u_int8_t instruction = (aaa << 5) + (bbb << 2) + cc;
+            uint8_t instruction = (aaa << 5) + (bbb << 2) + cc;
 
             bool is_valid = true;
             /* immediate STA is invalid */
@@ -277,7 +277,7 @@ static void init_opcode_vec() {
     cc = 2;
     for (aaa = 0; aaa < 8; aaa++) {
         for (bbb = 0; bbb < 8; bbb++) {
-            u_int8_t instruction = (aaa << 5) + (bbb << 2) + cc;
+            uint8_t instruction = (aaa << 5) + (bbb << 2) + cc;
             bool is_valid = true;
 
             struct OpcodeInfo op_info;
@@ -348,7 +348,7 @@ static void init_opcode_vec() {
     cc = 0;
     for (aaa = 1; aaa < 8; aaa++) {
         for (bbb = 0; bbb < 8; bbb++) {
-            u_int8_t instruction = (aaa << 5) + (bbb << 2) + cc;
+            uint8_t instruction = (aaa << 5) + (bbb << 2) + cc;
             bool is_valid = true;
 
             struct OpcodeInfo op_info;
@@ -412,9 +412,9 @@ static void init_opcode_vec() {
     }
 
     /* conditional branch instructions with bit pattern xxy10000 */
-    for (u_int8_t xx = 0; xx < 4; xx++) {
-        for (u_int8_t y = 0; y < 2; y++) {
-            u_int8_t instruction = (xx << 6) + (y << 5) + 16;
+    for (uint8_t xx = 0; xx < 4; xx++) {
+        for (uint8_t y = 0; y < 2; y++) {
+            uint8_t instruction = (xx << 6) + (y << 5) + 16;
             struct OpcodeInfo op_info = {.op_type = OP_BIF, .addr_mode = ADDR_RELATIVE, .branch_eq = y};
             switch (xx) {
                 case 0:
@@ -779,21 +779,21 @@ static void init_opcode_vec() {
     OPCODE_INFO_VEC[0xFF].num_cycles = 7;
 }
 
-static inline void set_negative_flag(u_int8_t reg_val) {
+static inline void set_negative_flag(uint8_t reg_val) {
     set_status_flag(STAT_NEGATIVE, reg_val >> 7);
 }
 
-static inline void set_zero_flag(u_int8_t reg_val) {
+static inline void set_zero_flag(uint8_t reg_val) {
     set_status_flag(STAT_ZERO, reg_val == 0);
 }
 
-static inline void push_onto_stack(u_int8_t val) {
-    u_int8_t *mem = getMemoryPtr(S + 0x100);
+static inline void push_onto_stack(uint8_t val) {
+    uint8_t *mem = getMemoryPtr(S + 0x100);
     *mem = val;
     S--;
 }
 
-static inline u_int8_t pop_from_stack() {
+static inline uint8_t pop_from_stack() {
     S++;
     return *getMemoryPtr(S + 0x100);
 }
@@ -802,40 +802,40 @@ static inline u_int8_t pop_from_stack() {
 
 /* Load and store operations */
 
-static inline void lda(const u_int8_t *mem) {
+static inline void lda(const uint8_t *mem) {
     A = *mem;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static inline void ldx(const u_int8_t *mem) {
+static inline void ldx(const uint8_t *mem) {
     X = *mem;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static inline void ldy(const u_int8_t *mem) {
+static inline void ldy(const uint8_t *mem) {
     Y = *mem;
     set_negative_flag(Y);
     set_zero_flag(Y);
 }
 
-static inline void sta(u_int8_t *mem) {
+static inline void sta(uint8_t *mem) {
     *mem = A;
 }
 
-static inline void stx(u_int8_t *mem) {
+static inline void stx(uint8_t *mem) {
     *mem = X;
 }
 
-static inline void sty(u_int8_t *mem) {
+static inline void sty(uint8_t *mem) {
     *mem = Y;
 }
 
 /* Arithmetic operations */
 
-static inline void adc(const u_int8_t *mem) {
-    u_int8_t prev_a = A;
+static inline void adc(const uint8_t *mem) {
+    uint8_t prev_a = A;
     A = A + *mem + get_status_flag(STAT_CARRY);
     set_status_flag(STAT_CARRY, A < *mem);
     set_zero_flag(A);
@@ -844,9 +844,9 @@ static inline void adc(const u_int8_t *mem) {
     set_negative_flag(A);
 }
 
-static inline void sbc(const u_int8_t *mem) {
+static inline void sbc(const uint8_t *mem) {
     /* formulas from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
-    u_int8_t prev_a = A;
+    uint8_t prev_a = A;
     A = A + ~(*mem) + get_status_flag(STAT_CARRY);
     set_status_flag(STAT_CARRY, (int8_t)A >= 0);
     set_zero_flag(A);
@@ -856,7 +856,7 @@ static inline void sbc(const u_int8_t *mem) {
 
 /* Increment and decrement */
 
-static inline void inc(u_int8_t *mem) {
+static inline void inc(uint8_t *mem) {
     (*mem)++;
     set_negative_flag(*mem);
     set_zero_flag(*mem);
@@ -874,7 +874,7 @@ static inline void iny() {
     set_zero_flag(Y);
 }
 
-static inline void dec(u_int8_t *mem) {
+static inline void dec(uint8_t *mem) {
     (*mem)--;
     set_negative_flag(*mem);
     set_zero_flag(*mem);
@@ -894,7 +894,7 @@ static inline void dey() {
 
 /* Shift and rotate */
 
-static inline void asl(u_int8_t *mem) {
+static inline void asl(uint8_t *mem) {
     bool carry = *mem & 0x80;
     *mem = *mem << 1;
     set_negative_flag(*mem);
@@ -902,7 +902,7 @@ static inline void asl(u_int8_t *mem) {
     set_status_flag(STAT_CARRY, carry);
 }
 
-static inline void lsr(u_int8_t *mem) {
+static inline void lsr(uint8_t *mem) {
     bool carry = *mem & 1;
     *mem = *mem >> 1;
     set_negative_flag(*mem);
@@ -910,7 +910,7 @@ static inline void lsr(u_int8_t *mem) {
     set_status_flag(STAT_CARRY, carry);
 }
 
-static inline void rol(u_int8_t *mem) {
+static inline void rol(uint8_t *mem) {
     bool carry = *mem & 0x80;
     *mem = *mem << 1;
     changeBit(*mem, 0, get_status_flag(STAT_CARRY));
@@ -919,7 +919,7 @@ static inline void rol(u_int8_t *mem) {
     set_status_flag(STAT_CARRY, carry);
 }
 
-static inline void ror(u_int8_t *mem) {
+static inline void ror(uint8_t *mem) {
     bool carry = *mem & 1;
     *mem = *mem >> 1;
     changeBit(*mem, 7, get_status_flag(STAT_CARRY));
@@ -930,19 +930,19 @@ static inline void ror(u_int8_t *mem) {
 
 /* Logic */
 
-static inline void and(const u_int8_t *mem) {
+static inline void and(const uint8_t *mem) {
     A &= *mem;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static inline void ora(const u_int8_t *mem) {
+static inline void ora(const uint8_t *mem) {
     A |= *mem;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static inline void eor(const u_int8_t *mem) {
+static inline void eor(const uint8_t *mem) {
     A ^= *mem;
     set_negative_flag(A);
     set_zero_flag(A);
@@ -950,25 +950,25 @@ static inline void eor(const u_int8_t *mem) {
 
 /* Compare and test bit */
 
-static inline void cmp(const u_int8_t *mem) {
+static inline void cmp(const uint8_t *mem) {
     set_status_flag(STAT_NEGATIVE, (A - *mem) >> 7);
     set_status_flag(STAT_ZERO, A == *mem);
     set_status_flag(STAT_CARRY, A >= *mem);
 }
 
-static inline void cpx(const u_int8_t *mem) {
+static inline void cpx(const uint8_t *mem) {
     set_status_flag(STAT_NEGATIVE, (X - *mem) >> 7 );
     set_status_flag(STAT_ZERO, X == *mem);
     set_status_flag(STAT_CARRY, X >= *mem);
 }
 
-static inline void cpy(const u_int8_t *mem) {
+static inline void cpy(const uint8_t *mem) {
     set_status_flag(STAT_NEGATIVE, (Y - *mem) >> 7);
     set_status_flag(STAT_ZERO, Y == *mem);
     set_status_flag(STAT_CARRY, Y >= *mem);
 }
 
-static inline void bit(const u_int8_t *mem) {
+static inline void bit(const uint8_t *mem) {
     set_status_flag(STAT_NEGATIVE, *mem >> 7);
     set_status_flag(STAT_OVERFLOW, (*mem & 0x40) >> 6);
     set_zero_flag(A & *mem);
@@ -976,7 +976,7 @@ static inline void bit(const u_int8_t *mem) {
 
 static inline void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
     if (get_status_flag(flag) == branch_eq) {
-        u_int16_t old_pc = PC;
+        uint16_t old_pc = PC;
         PC += *mem;
         // more cycles are taken on page cross and when the branch is taken
         cycles += crossed_boundary(old_pc+2, PC) ? 2 : 1;
@@ -1039,31 +1039,31 @@ static inline void plp() {
 
 /* Subroutines and jump */
 
-static inline void jmp(const u_int16_t *mem) {
+static inline void jmp(const uint16_t *mem) {
     PC = *mem;
 }
 
-static inline void jsr(const u_int16_t *mem) {
-    u_int8_t low_byte = (PC+2) & 0xFF;
-    u_int8_t high_byte = ((PC+2) & 0xFF00) >> 8;
+static inline void jsr(const uint16_t *mem) {
+    uint8_t low_byte = (PC+2) & 0xFF;
+    uint8_t high_byte = ((PC+2) & 0xFF00) >> 8;
     push_onto_stack(high_byte);
     push_onto_stack(low_byte);
     PC = *mem;
 }
 
 static inline void rts () {
-    u_int8_t low_byte = pop_from_stack();
-    u_int8_t high_byte = pop_from_stack();
-    u_int16_t addr = (high_byte << 8) + low_byte;
+    uint8_t low_byte = pop_from_stack();
+    uint8_t high_byte = pop_from_stack();
+    uint16_t addr = (high_byte << 8) + low_byte;
     PC = addr;
 }
 
 static inline void rti () {
     /* Make sure 5th bit is always set */
     STATUS = pop_from_stack() | 0x20;
-    u_int8_t low_byte = pop_from_stack();
-    u_int8_t high_byte = pop_from_stack();
-    u_int16_t addr = (high_byte << 8) + low_byte;
+    uint8_t low_byte = pop_from_stack();
+    uint8_t high_byte = pop_from_stack();
+    uint16_t addr = (high_byte << 8) + low_byte;
     PC = addr;
 }
 
@@ -1168,8 +1168,8 @@ static void serviceInterrupt(enum InterruptTypes interrupt) {
         return;
     }
     if (interrupt != INT_RESET) {
-        u_int8_t pc_lsb = PC & 0x00FF;
-        u_int8_t pc_msb = (PC & 0xFF00) >> 8;
+        uint8_t pc_lsb = PC & 0x00FF;
+        uint8_t pc_msb = (PC & 0xFF00) >> 8;
         push_onto_stack(pc_msb);
         push_onto_stack(pc_lsb);
         push_onto_stack(STATUS);
@@ -1193,7 +1193,7 @@ static inline void call0(const struct OpcodeInfo *info) {
     op_vec[info->op_type]();
 }
 
-static inline void call1(const struct OpcodeInfo *info, u_int8_t *mem) {
+static inline void call1(const struct OpcodeInfo *info, uint8_t *mem) {
     op_vec[info->op_type](mem);
 }
 
@@ -1214,7 +1214,7 @@ void runLoop(void *aux) {
     FILE *log_stream = aux;
     while (true) {
         const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
-        u_int64_t start_cycle = cycles;
+        uint64_t start_cycle = cycles;
         struct timespec start_time;
         timespec_get(&start_time, TIME_UTC);
 
@@ -1239,13 +1239,13 @@ void runLoop(void *aux) {
                 PC += 2;
                 break;
             case ADDR_ABSOLUTE: {
-                u_int16_t val = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
+                uint16_t val = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
                 if (next_op->op_type != OP_JMP && next_op->op_type != OP_JSR) {
                     call1(next_op, getMemoryPtr(val));
                     PC += 3;
                 }
                 else {
-                    call1(next_op, (u_int8_t *) &val);
+                    call1(next_op, (uint8_t *) &val);
                 }
                 break;
             }
@@ -1255,16 +1255,16 @@ void runLoop(void *aux) {
                 break;
             case ADDR_INDEXED_ZERO_PAGE:
                 if (next_op->index == 'X') {
-                    call1(next_op, getMemoryPtr((u_int8_t)(X + *getMemoryPtr(PC + 1))));
+                    call1(next_op, getMemoryPtr((uint8_t)(X + *getMemoryPtr(PC + 1))));
                 }
                 else {
-                    call1(next_op, getMemoryPtr((u_int8_t)(Y + *getMemoryPtr(PC + 1))));
+                    call1(next_op, getMemoryPtr((uint8_t)(Y + *getMemoryPtr(PC + 1))));
                 }
                 PC += 2;
                 break;
             case ADDR_INDEX_ABSOLUTE: {
-                u_int16_t abs_addr = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
-                u_int16_t indexed_addr = abs_addr + (next_op->index == 'X' ? X : Y);
+                uint16_t abs_addr = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
+                uint16_t indexed_addr = abs_addr + (next_op->index == 'X' ? X : Y);
                 call1(next_op, getMemoryPtr(indexed_addr));
                 if (next_op->extra_cycle_if_cross && crossed_boundary(abs_addr, indexed_addr)) {
                     cycles++;
@@ -1279,19 +1279,19 @@ void runLoop(void *aux) {
                 break;
             case ADDR_INDEXED_INDIRECT: {
                 assert(next_op->index == 'X');
-                u_int8_t low_byte = *getMemoryPtr((u_int8_t)(X + *getMemoryPtr(PC + 1)));
-                u_int8_t high_byte = *getMemoryPtr((u_int8_t)(X + *getMemoryPtr(PC + 1) + 1));
-                u_int16_t indirect_addr = (high_byte << 8) + low_byte;
+                uint8_t low_byte = *getMemoryPtr((uint8_t)(X + *getMemoryPtr(PC + 1)));
+                uint8_t high_byte = *getMemoryPtr((uint8_t)(X + *getMemoryPtr(PC + 1) + 1));
+                uint16_t indirect_addr = (high_byte << 8) + low_byte;
                 call1(next_op, getMemoryPtr(indirect_addr));
                 PC += 2;
                 break;
             }
             case ADDR_INDIRECT_INDEXED: {
                 assert(next_op->index == 'Y');
-                u_int8_t low_byte = *getMemoryPtr((u_int8_t)(*getMemoryPtr(PC + 1)));
-                u_int8_t high_byte = *getMemoryPtr((u_int8_t)(*getMemoryPtr(PC + 1) + 1));
-                u_int16_t indirect_addr = (high_byte << 8) + low_byte;
-                u_int16_t indirect_indexed_addr = Y + indirect_addr;
+                uint8_t low_byte = *getMemoryPtr((uint8_t)(*getMemoryPtr(PC + 1)));
+                uint8_t high_byte = *getMemoryPtr((uint8_t)(*getMemoryPtr(PC + 1) + 1));
+                uint16_t indirect_addr = (high_byte << 8) + low_byte;
+                uint16_t indirect_indexed_addr = Y + indirect_addr;
                 call1(next_op, getMemoryPtr(indirect_indexed_addr));
                 if (next_op->extra_cycle_if_cross && crossed_boundary(indirect_addr, indirect_indexed_addr)) {
                     cycles++;
@@ -1301,9 +1301,9 @@ void runLoop(void *aux) {
             }
             case ADDR_ABSOLUTE_INDIRECT: {
                 assert(next_op->op_type == OP_JMP);
-                u_int8_t low_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1));
-                u_int8_t high_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + (u_int8_t)(*getMemoryPtr(PC + 1) + 1));
-                u_int16_t indirect_addr = (high_byte << 8) + low_byte;
+                uint8_t low_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1));
+                uint8_t high_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + (uint8_t)(*getMemoryPtr(PC + 1) + 1));
+                uint16_t indirect_addr = (high_byte << 8) + low_byte;
                 jmp(&indirect_addr);
                 break;
             }
@@ -1335,7 +1335,7 @@ void stopCPUExecution() {
     triggerInterrupt(INT_KILL);
 }
 
-void setCPUFreq(u_int32_t freq) {
+void setCPUFreq(uint32_t freq) {
     cpu_freq = freq;
 }
 
