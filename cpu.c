@@ -801,39 +801,39 @@ static inline u_int8_t pop_from_stack() {
 
 /* Load and store operations */
 
-static void lda(const u_int8_t *mem) {
+static inline void lda(const u_int8_t *mem) {
     A = *mem;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static void ldx(const u_int8_t *mem) {
+static inline void ldx(const u_int8_t *mem) {
     X = *mem;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void ldy(const u_int8_t *mem) {
+static inline void ldy(const u_int8_t *mem) {
     Y = *mem;
     set_negative_flag(Y);
     set_zero_flag(Y);
 }
 
-static void sta(u_int8_t *mem) {
+static inline void sta(u_int8_t *mem) {
     *mem = A;
 }
 
-static void stx(u_int8_t *mem) {
+static inline void stx(u_int8_t *mem) {
     *mem = X;
 }
 
-static void sty(u_int8_t *mem) {
+static inline void sty(u_int8_t *mem) {
     *mem = Y;
 }
 
 /* Arithmetic operations */
 
-static void adc(const u_int8_t *mem) {
+static inline void adc(const u_int8_t *mem) {
     u_int8_t prev_a = A;
     A = A + *mem + get_status_flag(STAT_CARRY);
     set_status_flag(STAT_CARRY, A < *mem);
@@ -843,7 +843,7 @@ static void adc(const u_int8_t *mem) {
     set_negative_flag(A);
 }
 
-static void sbc(const u_int8_t *mem) {
+static inline void sbc(const u_int8_t *mem) {
     /* formulas from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
     u_int8_t prev_a = A;
     A = A + ~(*mem) + get_status_flag(STAT_CARRY);
@@ -855,37 +855,37 @@ static void sbc(const u_int8_t *mem) {
 
 /* Increment and decrement */
 
-static void inc(u_int8_t *mem) {
+static inline void inc(u_int8_t *mem) {
     (*mem)++;
     set_negative_flag(*mem);
     set_zero_flag(*mem);
 }
 
-static void inx() {
+static inline void inx() {
     X++;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void iny() {
+static inline void iny() {
     Y++;
     set_negative_flag(Y);
     set_zero_flag(Y);
 }
 
-static void dec(u_int8_t *mem) {
+static inline void dec(u_int8_t *mem) {
     (*mem)--;
     set_negative_flag(*mem);
     set_zero_flag(*mem);
 }
 
-static void dex() {
+static inline void dex() {
     X--;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void dey() {
+static inline void dey() {
     Y--;
     set_negative_flag(Y);
     set_zero_flag(Y);
@@ -893,7 +893,7 @@ static void dey() {
 
 /* Shift and rotate */
 
-static void asl(u_int8_t *mem) {
+static inline void asl(u_int8_t *mem) {
     bool carry = *mem & 0x80;
     *mem = *mem << 1;
     set_negative_flag(*mem);
@@ -901,7 +901,7 @@ static void asl(u_int8_t *mem) {
     set_status_flag(STAT_CARRY, carry);
 }
 
-static void lsr(u_int8_t *mem) {
+static inline void lsr(u_int8_t *mem) {
     bool carry = *mem & 1;
     *mem = *mem >> 1;
     set_negative_flag(*mem);
@@ -909,7 +909,7 @@ static void lsr(u_int8_t *mem) {
     set_status_flag(STAT_CARRY, carry);
 }
 
-static void rol(u_int8_t *mem) {
+static inline void rol(u_int8_t *mem) {
     bool carry = *mem & 0x80;
     *mem = *mem << 1;
     changeBit(*mem, 0, get_status_flag(STAT_CARRY));
@@ -918,7 +918,7 @@ static void rol(u_int8_t *mem) {
     set_status_flag(STAT_CARRY, carry);
 }
 
-static void ror(u_int8_t *mem) {
+static inline void ror(u_int8_t *mem) {
     bool carry = *mem & 1;
     *mem = *mem >> 1;
     changeBit(*mem, 7, get_status_flag(STAT_CARRY));
@@ -929,19 +929,19 @@ static void ror(u_int8_t *mem) {
 
 /* Logic */
 
-static void and(const u_int8_t *mem) {
+static inline void and(const u_int8_t *mem) {
     A &= *mem;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static void ora(const u_int8_t *mem) {
+static inline void ora(const u_int8_t *mem) {
     A |= *mem;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static void eor(const u_int8_t *mem) {
+static inline void eor(const u_int8_t *mem) {
     A ^= *mem;
     set_negative_flag(A);
     set_zero_flag(A);
@@ -949,31 +949,31 @@ static void eor(const u_int8_t *mem) {
 
 /* Compare and test bit */
 
-static void cmp(const u_int8_t *mem) {
+static inline void cmp(const u_int8_t *mem) {
     set_status_flag(STAT_NEGATIVE, (A - *mem) >> 7);
     set_status_flag(STAT_ZERO, A == *mem);
     set_status_flag(STAT_CARRY, A >= *mem);
 }
 
-static void cpx(const u_int8_t *mem) {
+static inline void cpx(const u_int8_t *mem) {
     set_status_flag(STAT_NEGATIVE, (X - *mem) >> 7 );
     set_status_flag(STAT_ZERO, X == *mem);
     set_status_flag(STAT_CARRY, X >= *mem);
 }
 
-static void cpy(const u_int8_t *mem) {
+static inline void cpy(const u_int8_t *mem) {
     set_status_flag(STAT_NEGATIVE, (Y - *mem) >> 7);
     set_status_flag(STAT_ZERO, Y == *mem);
     set_status_flag(STAT_CARRY, Y >= *mem);
 }
 
-static void bit(const u_int8_t *mem) {
+static inline void bit(const u_int8_t *mem) {
     set_status_flag(STAT_NEGATIVE, *mem >> 7);
     set_status_flag(STAT_OVERFLOW, (*mem & 0x40) >> 6);
     set_zero_flag(A & *mem);
 }
 
-static void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
+static inline void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
     if (get_status_flag(flag) == branch_eq) {
         u_int16_t old_pc = PC;
         PC += *mem;
@@ -982,67 +982,67 @@ static void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
     }
 }
 
-static void tax() {
+static inline void tax() {
     X = A;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void txa() {
+static inline void txa() {
     A = X;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static void tay() {
+static inline void tay() {
     Y = A;
     set_negative_flag(Y);
     set_zero_flag(Y);
 }
 
-static void tya() {
+static inline void tya() {
     A = Y;
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static void tsx() {
+static inline void tsx() {
     X = S;
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static void txs() {
+static inline void txs() {
     S = X;
 }
 
-static void pha() {
+static inline void pha() {
     push_onto_stack(A);
 }
 
-static void pla() {
+static inline void pla() {
     A = pop_from_stack();
     set_zero_flag(A);
     set_negative_flag(A);
 }
 
-static void php() {
+static inline void php() {
     /* BRK flag is always set when STATUS is pushed */
     push_onto_stack(STATUS | 0x10);
 }
 
-static void plp() {
+static inline void plp() {
     /* Ignore BRK flag but always set 5th bit*/
     STATUS = (pop_from_stack() & 0xEF) | 0x20;
 }
 
 /* Subroutines and jump */
 
-static void jmp(const u_int16_t *mem) {
+static inline void jmp(const u_int16_t *mem) {
     PC = *mem;
 }
 
-static void jsr(const u_int16_t *mem) {
+static inline void jsr(const u_int16_t *mem) {
     u_int8_t low_byte = (PC+2) & 0xFF;
     u_int8_t high_byte = ((PC+2) & 0xFF00) >> 8;
     push_onto_stack(high_byte);
@@ -1050,14 +1050,14 @@ static void jsr(const u_int16_t *mem) {
     PC = *mem;
 }
 
-static void rts () {
+static inline void rts () {
     u_int8_t low_byte = pop_from_stack();
     u_int8_t high_byte = pop_from_stack();
     u_int16_t addr = (high_byte << 8) + low_byte;
     PC = addr;
 }
 
-static void rti () {
+static inline void rti () {
     /* Make sure 5th bit is always set */
     STATUS = pop_from_stack() | 0x20;
     u_int8_t low_byte = pop_from_stack();
@@ -1068,42 +1068,42 @@ static void rti () {
 
 /* Set and clear */
 
-static void clc() {
+static inline void clc() {
     set_status_flag(STAT_CARRY, 0);
 }
 
-static void sec() {
+static inline void sec() {
     set_status_flag(STAT_CARRY, 1);
 }
 
-static void cld() {
+static inline void cld() {
     set_status_flag(STAT_DEC_MODE, 0);
 }
 
-static void sed() {
+static inline void sed() {
     set_status_flag(STAT_DEC_MODE, 1);
 }
 
-static void cli() {
+static inline void cli() {
     set_status_flag(STAT_IRQ_DISABLE, 0);
 }
 
-static void sei() {
+static inline void sei() {
     set_status_flag(STAT_IRQ_DISABLE, 1);
 }
 
 /* Miscellaneous */
 
-static void clv() {
+static inline void clv() {
     set_status_flag(STAT_OVERFLOW, 0);
 }
 
-static void brk() {
+static inline void brk() {
     set_status_flag(STAT_BRK_COMMAND, 1);
     set_status_flag(STAT_IRQ_DISABLE, 1);
 }
 
-static void nop() {
+static inline void nop() {
 }
 
 typedef void (*OpFunc)();
@@ -1214,6 +1214,8 @@ static void *runLoop(void *aux) {
     while (true) {
         const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
         u_int64_t start_cycle = cycles;
+        struct timespec start_time;
+        timespec_get(&start_time, TIME_UTC);
 
         if (log_stream) {
             fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%lu\n", PC, *getMemoryPtr(PC),
