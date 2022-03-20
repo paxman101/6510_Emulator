@@ -1312,6 +1312,9 @@ static void *runLoop(void *aux) {
         cycles += next_op->num_cycles;
 
         if (current_interrupt != 0) {
+            if (current_interrupt == INT_KILL) {
+                return;
+            }
             serviceInterrupt(current_interrupt);
             current_interrupt = 0;
         }
