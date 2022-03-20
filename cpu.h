@@ -6,6 +6,9 @@
 #define INC_6510_CPU_H
 
 #include <stdio.h>
+#include <stdlib.h>
+
+typedef void (*SleepFunction)(double time_to_sleep);
 
 /* Types of interrupts to be handled by the cpu.
  * The value of which corresponds to the LSB of each interrupt's respective interrupt vector (excpet for KILL) */
@@ -23,9 +26,21 @@ void resetCPU();
 
 void triggerInterrupt(enum InterruptTypes interrupt);
 
-/* Begins CPU execution in a new thread.
- * If log_stream is not NULL, the cpu will print debug info to the given file
+/* Run loop for the CPU emulation.
+ * aux should be a pointer to a FILE stream.
+ * If aux is not NULL, the cpu will print debug info to the given file
  * each cycle. */
-void startCPUExecution(FILE *log_stream);
+void runLoop(void *aux);
+
+/* Stops CPU execution by raising INT_KILL. */
+void stopCPUExecution();
+
+/* If you want to emulate the execution speed of the 6502 with the
+ * frequency set with setCPUFreq(), you can specify a function that
+ * will sleep given a time_to_sleep arg in seconds. */
+void setSleepFunction(SleepFunction func);
+
+/* Set emulated CPU freq to freq given in Hz. */
+void setCPUFreq(u_int32_t freq);
 
 #endif //INC_6510_CPU_H

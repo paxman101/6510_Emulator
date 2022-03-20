@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <assert.h>
-#include <pthread.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "memory.h"
 
@@ -24,9 +24,10 @@ static u_int8_t  Y;         /* Y index */
 static u_int8_t  S;         /* stack point */
 
 static u_int64_t cycles;
+static u_int32_t cpu_freq;  /* CPU freq to emulate in hz. */
 
 static enum InterruptTypes current_interrupt = 0;
-pthread_t cpu_run_thread;
+static SleepFunction sleep_func = NULL;
 
 /* Status Flags */
 enum StatusFlag {
@@ -1209,7 +1210,7 @@ void triggerInterrupt(enum InterruptTypes interrupt) {
     current_interrupt = interrupt;
 }
 
-static void *runLoop(void *aux) {
+void runLoop(void *aux) {
     FILE *log_stream = aux;
     while (true) {
         const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
@@ -1310,6 +1311,15 @@ static void *runLoop(void *aux) {
                 assert(false);
         }
         cycles += next_op->num_cycles;
+        if (cpu_freq != 0 && sleep_func != NULL) {
+            struct timespec end_time;
+            timespec_get(&end_time, TIME_UTC);
+
+            double time_exec = (double)end_time.tv_sec - (double)start_time.tv_sec + ((double)end_time.tv_nsec
+                    - (double)start_time.tv_nsec) / 1000000000;
+            double time_to_sleep = ((double)cycles - (double)start_cycle) * (1/(double)cpu_freq) - time_exec;
+            sleep_func(time_to_sleep);
+        }
 
         if (current_interrupt != 0) {
             if (current_interrupt == INT_KILL) {
@@ -1321,9 +1331,16 @@ static void *runLoop(void *aux) {
     }
 }
 
-void startCPUExecution(FILE *log_stream) {
-    pthread_create(&cpu_run_thread, NULL, runLoop, log_stream);
-    pthread_join(cpu_run_thread, NULL);
+void stopCPUExecution() {
+    triggerInterrupt(INT_KILL);
+}
+
+void setCPUFreq(u_int32_t freq) {
+    cpu_freq = freq;
+}
+
+void setSleepFunction(SleepFunction func) {
+    sleep_func = func;
 }
 
 //int main () {
