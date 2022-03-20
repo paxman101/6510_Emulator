@@ -13,7 +13,7 @@ void initMemory(GetMemoryFunc func) {
     get_memory_func = func;
 }
 
-inline u_int8_t *getMemoryPtr(u_int16_t address) {
+u_int8_t *getMemoryPtr(u_int16_t address) {
     return get_memory_func(address);
 }
 

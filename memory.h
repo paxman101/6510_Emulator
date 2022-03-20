@@ -13,7 +13,7 @@ typedef u_int8_t *(*GetMemoryFunc)(u_int16_t address);
 void initMemory(GetMemoryFunc func);
 
 /* Returns pointer to the memory at the given address */
-inline u_int8_t *getMemoryPtr(u_int16_t address);
+u_int8_t *getMemoryPtr(u_int16_t address);
 
 void loadBinFile(const char *path, u_int16_t mem_offset, long file_offset, u_int16_t bytes_to_read);
 
