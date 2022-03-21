@@ -31,9 +31,8 @@ void loadBinFile(const char *path, uint16_t offset, long file_offset, uint16_t b
     }
 
     int in;
-
     int loc = 0;
-    while ((in = getc(bin_file)) != EOF && loc < bytes_to_read) {
+    while ((in = getc(bin_file)) != EOF && (loc < bytes_to_read || bytes_to_read == 0)) {
         *getMemoryPtr(offset + loc++) = in;
     }
 
