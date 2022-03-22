@@ -7,13 +7,15 @@
 
 #include <stdint.h>
 
-typedef uint8_t *(*GetMemoryFunc)(uint16_t address);
+typedef uint8_t (*GetMemoryFunc)(uint16_t address);
+typedef void (*SetMemoryFunc)(uint16_t address, uint8_t val);
 
 /* Define function that will access the memory with func. */
-void initMemory(GetMemoryFunc func);
+void initMemoryFuncs(GetMemoryFunc get_func, SetMemoryFunc set_func);
 
-/* Returns pointer to the memory at the given address */
-uint8_t *getMemoryPtr(uint16_t address);
+uint8_t getMemoryValue(uint16_t address);
+
+void setMemoryValue(uint16_t address, uint8_t val);
 
 void loadBinFile(const char *path, uint16_t mem_offset, long file_offset, uint16_t bytes_to_read);
 

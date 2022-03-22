@@ -202,7 +202,7 @@ static void init_opcode_vec() {
                 is_valid = false;
             }
 
-            struct OpcodeInfo op_info;
+            struct OpcodeInfo op_info = {};
 
             switch (aaa) {
                 case 0:
@@ -788,78 +788,80 @@ static inline void set_zero_flag(uint8_t reg_val) {
 }
 
 static inline void push_onto_stack(uint8_t val) {
-    uint8_t *mem = getMemoryPtr(S + 0x100);
-    *mem = val;
+    setMemoryValue(S + 0x100, val);
     S--;
 }
 
 static inline uint8_t pop_from_stack() {
     S++;
-    return *getMemoryPtr(S + 0x100);
+    return getMemoryValue(S + 0x100);
 }
 
 /* in order as shown on https://en.wikibooks.org/wiki/6502_Assembly */
 
 /* Load and store operations */
 
-static inline void lda(const uint8_t *mem) {
-    A = *mem;
+static inline void lda(const uint16_t *addr_ptr) {
+    A = getMemoryValue(*addr_ptr);
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static inline void ldx(const uint8_t *mem) {
-    X = *mem;
+static inline void ldx(const uint16_t *addr_ptr) {
+    X = getMemoryValue(*addr_ptr);
     set_negative_flag(X);
     set_zero_flag(X);
 }
 
-static inline void ldy(const uint8_t *mem) {
-    Y = *mem;
+static inline void ldy(const uint16_t *addr_ptr) {
+    Y = getMemoryValue(*addr_ptr);
     set_negative_flag(Y);
     set_zero_flag(Y);
 }
 
-static inline void sta(uint8_t *mem) {
-    *mem = A;
+static inline void sta(const uint16_t *addr_ptr) {
+    setMemoryValue(*addr_ptr, A);
 }
 
-static inline void stx(uint8_t *mem) {
-    *mem = X;
+static inline void stx(const uint16_t *addr_ptr) {
+    setMemoryValue(*addr_ptr, X);
 }
 
-static inline void sty(uint8_t *mem) {
-    *mem = Y;
+static inline void sty(const uint16_t *addr_ptr) {
+    setMemoryValue(*addr_ptr, Y);
 }
 
 /* Arithmetic operations */
 
-static inline void adc(const uint8_t *mem) {
+static inline void adc(const uint16_t *addr_ptr) {
     uint8_t prev_a = A;
-    A = A + *mem + get_status_flag(STAT_CARRY);
-    set_status_flag(STAT_CARRY, A < *mem);
+    uint8_t val = getMemoryValue(*addr_ptr);
+    A = A + val + get_status_flag(STAT_CARRY);
+    set_status_flag(STAT_CARRY, A < val);
     set_zero_flag(A);
     /* overflow from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
-    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (*mem ^ A) & 0x80));
+    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (val ^ A) & 0x80));
     set_negative_flag(A);
 }
 
-static inline void sbc(const uint8_t *mem) {
+static inline void sbc(const uint16_t *addr_ptr) {
     /* formulas from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
     uint8_t prev_a = A;
-    A = A + ~(*mem) + get_status_flag(STAT_CARRY);
+    uint8_t val = getMemoryValue(*addr_ptr);
+    A = A + ~(val) + get_status_flag(STAT_CARRY);
     set_status_flag(STAT_CARRY, (int8_t)A >= 0);
     set_zero_flag(A);
-    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (~(*mem) ^ A) & 0x80));
+    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (~(val) ^ A) & 0x80));
     set_negative_flag(A);
 }
 
 /* Increment and decrement */
 
-static inline void inc(uint8_t *mem) {
-    (*mem)++;
-    set_negative_flag(*mem);
-    set_zero_flag(*mem);
+static inline void inc(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr) + 1;
+    setMemoryValue(*addr_ptr, val);
+    set_negative_flag(val);
+    set_zero_flag(val);
 }
 
 static inline void inx() {
@@ -874,10 +876,11 @@ static inline void iny() {
     set_zero_flag(Y);
 }
 
-static inline void dec(uint8_t *mem) {
-    (*mem)--;
-    set_negative_flag(*mem);
-    set_zero_flag(*mem);
+static inline void dec(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr) - 1;
+    setMemoryValue(*addr_ptr, val);
+    set_negative_flag(val);
+    set_zero_flag(val);
 }
 
 static inline void dex() {
@@ -894,90 +897,126 @@ static inline void dey() {
 
 /* Shift and rotate */
 
-static inline void asl(uint8_t *mem) {
-    bool carry = *mem & 0x80;
-    *mem = *mem << 1;
-    set_negative_flag(*mem);
-    set_zero_flag(*mem);
+static inline void asl_(uint8_t *mem) {
+    uint8_t val = *mem;
+    bool carry = val & 0x80;
+    val = val << 1;
+    *mem = val;
+    set_negative_flag(val);
+    set_zero_flag(val);
     set_status_flag(STAT_CARRY, carry);
 }
 
-static inline void lsr(uint8_t *mem) {
-    bool carry = *mem & 1;
-    *mem = *mem >> 1;
-    set_negative_flag(*mem);
-    set_zero_flag(*mem);
+static inline void asl(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    asl_(&val);
+    setMemoryValue(*addr_ptr, val);
+}
+
+static inline void lsr_(uint8_t *mem) {
+    uint8_t val = *mem;
+    bool carry = val & 1;
+    val = val >> 1;
+    *mem = val;
+    set_negative_flag(val);
+    set_zero_flag(val);
     set_status_flag(STAT_CARRY, carry);
 }
 
-static inline void rol(uint8_t *mem) {
-    bool carry = *mem & 0x80;
-    *mem = *mem << 1;
-    changeBit(*mem, 0, get_status_flag(STAT_CARRY));
-    set_negative_flag(*mem);
-    set_zero_flag(*mem);
+static inline void lsr(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    lsr_(&val);
+    setMemoryValue(*addr_ptr, val);
+}
+
+static inline void rol_(uint8_t *mem) {
+    uint8_t val = *mem;
+    bool carry = val & 0x80;
+    val = val << 1;
+    changeBit(val, 0, get_status_flag(STAT_CARRY));
+    *mem = val;
+    set_negative_flag(val);
+    set_zero_flag(val);
     set_status_flag(STAT_CARRY, carry);
 }
 
-static inline void ror(uint8_t *mem) {
-    bool carry = *mem & 1;
-    *mem = *mem >> 1;
-    changeBit(*mem, 7, get_status_flag(STAT_CARRY));
-    set_negative_flag(*mem);
-    set_zero_flag(*mem);
+static inline void rol(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    rol_(&val);
+    setMemoryValue(*addr_ptr, val);
+}
+
+static inline void ror_(uint8_t *mem) {
+    uint8_t val = *mem;
+    bool carry = val & 1;
+    val = val >> 1;
+    changeBit(val, 7, get_status_flag(STAT_CARRY));
+    *mem = val;
+    set_negative_flag(val);
+    set_zero_flag(val);
     set_status_flag(STAT_CARRY, carry);
+}
+
+static inline void ror(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    ror_(&val);
+    setMemoryValue(*addr_ptr, val);
 }
 
 /* Logic */
 
-static inline void and(const uint8_t *mem) {
-    A &= *mem;
+static inline void and(const uint16_t *addr_ptr) {
+    A &= getMemoryValue(*addr_ptr);
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static inline void ora(const uint8_t *mem) {
-    A |= *mem;
+static inline void ora(const uint16_t *addr_ptr) {
+    A |= getMemoryValue(*addr_ptr);
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
-static inline void eor(const uint8_t *mem) {
-    A ^= *mem;
+static inline void eor(const uint16_t *addr_ptr) {
+    A ^= getMemoryValue(*addr_ptr);
     set_negative_flag(A);
     set_zero_flag(A);
 }
 
 /* Compare and test bit */
 
-static inline void cmp(const uint8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, (A - *mem) >> 7);
-    set_status_flag(STAT_ZERO, A == *mem);
-    set_status_flag(STAT_CARRY, A >= *mem);
+static inline void cmp(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    set_status_flag(STAT_NEGATIVE, (A - val) >> 7);
+    set_status_flag(STAT_ZERO, A == val);
+    set_status_flag(STAT_CARRY, A >= val);
 }
 
-static inline void cpx(const uint8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, (X - *mem) >> 7 );
-    set_status_flag(STAT_ZERO, X == *mem);
-    set_status_flag(STAT_CARRY, X >= *mem);
+static inline void cpx(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    set_status_flag(STAT_NEGATIVE, (X - val) >> 7 );
+    set_status_flag(STAT_ZERO, X == val);
+    set_status_flag(STAT_CARRY, X >= val);
 }
 
-static inline void cpy(const uint8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, (Y - *mem) >> 7);
-    set_status_flag(STAT_ZERO, Y == *mem);
-    set_status_flag(STAT_CARRY, Y >= *mem);
+static inline void cpy(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    set_status_flag(STAT_NEGATIVE, (Y - val) >> 7);
+    set_status_flag(STAT_ZERO, Y == val);
+    set_status_flag(STAT_CARRY, Y >= val);
 }
 
-static inline void bit(const uint8_t *mem) {
-    set_status_flag(STAT_NEGATIVE, *mem >> 7);
-    set_status_flag(STAT_OVERFLOW, (*mem & 0x40) >> 6);
-    set_zero_flag(A & *mem);
+static inline void bit(const uint16_t *addr_ptr) {
+    uint8_t val = getMemoryValue(*addr_ptr);
+    set_status_flag(STAT_NEGATIVE, val >> 7);
+    set_status_flag(STAT_OVERFLOW, (val & 0x40) >> 6);
+    set_zero_flag(A & val);
 }
 
-static inline void bif(const int8_t *mem, enum StatusFlag flag, bool branch_eq) {
+static inline void bif(const int8_t offset, enum StatusFlag flag, bool branch_eq) {
     if (get_status_flag(flag) == branch_eq) {
         uint16_t old_pc = PC;
-        PC += *mem;
+        PC += offset;
         // more cycles are taken on page cross and when the branch is taken
         cycles += crossed_boundary(old_pc+2, PC) ? 2 : 1;
     }
@@ -1039,16 +1078,16 @@ static inline void plp() {
 
 /* Subroutines and jump */
 
-static inline void jmp(const uint16_t *mem) {
-    PC = *mem;
+static inline void jmp(const uint16_t *addr_ptr) {
+    PC = *addr_ptr;
 }
 
-static inline void jsr(const uint16_t *mem) {
+static inline void jsr(const uint16_t *addr_ptr) {
     uint8_t low_byte = (PC+2) & 0xFF;
     uint8_t high_byte = ((PC+2) & 0xFF00) >> 8;
     push_onto_stack(high_byte);
     push_onto_stack(low_byte);
-    PC = *mem;
+    PC = *addr_ptr;
 }
 
 static inline void rts () {
@@ -1186,15 +1225,30 @@ static void serviceInterrupt(enum InterruptTypes interrupt) {
         set_status_flag(5, 1);
         S = 0xFD;
     }
-    PC = (*getMemoryPtr(interrupt+1) << 8) + *getMemoryPtr(interrupt);
+    PC = (getMemoryValue(interrupt+1) << 8) + getMemoryValue(interrupt);
 }
 
 static inline void call0(const struct OpcodeInfo *info) {
-    op_vec[info->op_type]();
+    switch(info->op_type) {
+        case (OP_ASL):
+            asl_(&A);
+            break;
+        case (OP_LSR):
+            lsr_(&A);
+            break;
+        case (OP_ROL):
+            rol_(&A);
+            break;
+        case (OP_ROR):
+            ror_(&A);
+            break;
+        default:
+            op_vec[info->op_type]();
+    }
 }
 
-static inline void call1(const struct OpcodeInfo *info, uint8_t *mem) {
-    op_vec[info->op_type](mem);
+static inline void call1(const struct OpcodeInfo *info, uint16_t *addr_ptr) {
+    op_vec[info->op_type](addr_ptr);
 }
 
 void initCPU() {
@@ -1213,59 +1267,54 @@ void triggerInterrupt(enum InterruptTypes interrupt) {
 void runLoop(void *aux) {
     FILE *log_stream = aux;
     while (true) {
-        const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[*getMemoryPtr(PC)];
+        const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[getMemoryValue(PC)];
         uint64_t start_cycle = cycles;
         struct timespec start_time;
         timespec_get(&start_time, TIME_UTC);
 
         if (log_stream) {
-            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%lu\n", PC, *getMemoryPtr(PC),
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%lu\n", PC, getMemoryValue(PC),
                    A, X, Y, STATUS, S, cycles);
         }
 
         switch (next_op->addr_mode) {
             case ADDR_ACCUMULATOR:
-                call1(next_op, &A);
-                PC += 1;
-                break;
             case ADDR_IMPLIED:
                 call0(next_op);
                 if (next_op->op_type != OP_RTI) {
                     PC += 1;
                 }
                 break;
-            case ADDR_IMMEDIATE:
-                call1(next_op, getMemoryPtr(PC + 1));
+            case ADDR_IMMEDIATE: {
+                uint16_t addr = PC + 1;
+                call1(next_op, &addr);
                 PC += 2;
                 break;
+            }
             case ADDR_ABSOLUTE: {
-                uint16_t val = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
+                uint16_t val = (getMemoryValue(PC + 2) << 8) + getMemoryValue(PC + 1);
+                call1(next_op, &val);
                 if (next_op->op_type != OP_JMP && next_op->op_type != OP_JSR) {
-                    call1(next_op, getMemoryPtr(val));
                     PC += 3;
-                }
-                else {
-                    call1(next_op, (uint8_t *) &val);
                 }
                 break;
             }
-            case ADDR_ZERO_PAGE:
-                call1(next_op, getMemoryPtr(0x00 + *getMemoryPtr(PC + 1)));
+            case ADDR_ZERO_PAGE: {
+                uint16_t zero_addr = (uint8_t) getMemoryValue(PC + 1);
+                call1(next_op, &zero_addr);
                 PC += 2;
                 break;
-            case ADDR_INDEXED_ZERO_PAGE:
-                if (next_op->index == 'X') {
-                    call1(next_op, getMemoryPtr((uint8_t)(X + *getMemoryPtr(PC + 1))));
-                }
-                else {
-                    call1(next_op, getMemoryPtr((uint8_t)(Y + *getMemoryPtr(PC + 1))));
-                }
+            }
+            case ADDR_INDEXED_ZERO_PAGE: {
+                uint16_t zero_addr = (uint8_t)(getMemoryValue(PC + 1) + (next_op->index == 'X' ? X : Y));
+                call1(next_op, &zero_addr);
                 PC += 2;
                 break;
+            }
             case ADDR_INDEX_ABSOLUTE: {
-                uint16_t abs_addr = (*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1);
+                uint16_t abs_addr = (getMemoryValue(PC + 2) << 8) + getMemoryValue(PC + 1);
                 uint16_t indexed_addr = abs_addr + (next_op->index == 'X' ? X : Y);
-                call1(next_op, getMemoryPtr(indexed_addr));
+                call1(next_op, &indexed_addr);
                 if (next_op->extra_cycle_if_cross && crossed_boundary(abs_addr, indexed_addr)) {
                     cycles++;
                 }
@@ -1274,25 +1323,25 @@ void runLoop(void *aux) {
             }
             case ADDR_RELATIVE:
                 assert(next_op->op_type == OP_BIF);
-                bif((const int8_t *)getMemoryPtr(PC + 1), next_op->branch_condition, next_op->branch_eq);
+                bif((int8_t)getMemoryValue(PC + 1), next_op->branch_condition, next_op->branch_eq);
                 PC += 2;
                 break;
             case ADDR_INDEXED_INDIRECT: {
                 assert(next_op->index == 'X');
-                uint8_t low_byte = *getMemoryPtr((uint8_t)(X + *getMemoryPtr(PC + 1)));
-                uint8_t high_byte = *getMemoryPtr((uint8_t)(X + *getMemoryPtr(PC + 1) + 1));
+                uint8_t low_byte = getMemoryValue((uint8_t)(X + getMemoryValue(PC + 1)));
+                uint8_t high_byte = getMemoryValue((uint8_t)(X + getMemoryValue(PC + 1) + 1));
                 uint16_t indirect_addr = (high_byte << 8) + low_byte;
-                call1(next_op, getMemoryPtr(indirect_addr));
+                call1(next_op, &indirect_addr);
                 PC += 2;
                 break;
             }
             case ADDR_INDIRECT_INDEXED: {
                 assert(next_op->index == 'Y');
-                uint8_t low_byte = *getMemoryPtr((uint8_t)(*getMemoryPtr(PC + 1)));
-                uint8_t high_byte = *getMemoryPtr((uint8_t)(*getMemoryPtr(PC + 1) + 1));
+                uint8_t low_byte = getMemoryValue((uint8_t)(getMemoryValue(PC + 1)));
+                uint8_t high_byte = getMemoryValue((uint8_t)(getMemoryValue(PC + 1) + 1));
                 uint16_t indirect_addr = (high_byte << 8) + low_byte;
                 uint16_t indirect_indexed_addr = Y + indirect_addr;
-                call1(next_op, getMemoryPtr(indirect_indexed_addr));
+                call1(next_op, &indirect_indexed_addr);
                 if (next_op->extra_cycle_if_cross && crossed_boundary(indirect_addr, indirect_indexed_addr)) {
                     cycles++;
                 }
@@ -1301,8 +1350,8 @@ void runLoop(void *aux) {
             }
             case ADDR_ABSOLUTE_INDIRECT: {
                 assert(next_op->op_type == OP_JMP);
-                uint8_t low_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + *getMemoryPtr(PC + 1));
-                uint8_t high_byte = *getMemoryPtr((*getMemoryPtr(PC + 2) << 8) + (uint8_t)(*getMemoryPtr(PC + 1) + 1));
+                uint8_t low_byte = getMemoryValue((getMemoryValue(PC + 2) << 8) + getMemoryValue(PC + 1));
+                uint8_t high_byte = getMemoryValue((getMemoryValue(PC + 2) << 8) + (uint8_t)(getMemoryValue(PC + 1) + 1));
                 uint16_t indirect_addr = (high_byte << 8) + low_byte;
                 jmp(&indirect_addr);
                 break;
