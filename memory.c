@@ -21,7 +21,7 @@ uint8_t getMemoryValue(uint16_t address) {
 }
 
 void setMemoryValue(uint16_t address, uint8_t val) {
-    return set_memory_func(address, val);
+    set_memory_func(address, val);
 }
 
 void loadBinFile(const char *path, uint16_t offset, long file_offset, uint16_t bytes_to_read) {

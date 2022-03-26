@@ -202,7 +202,7 @@ static void init_opcode_vec() {
                 is_valid = false;
             }
 
-            struct OpcodeInfo op_info = {};
+            struct OpcodeInfo op_info = {.addr_mode=0};
 
             switch (aaa) {
                 case 0:
