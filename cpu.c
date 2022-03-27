@@ -1361,13 +1361,7 @@ void runLoop(void *aux) {
         }
         cycles += next_op->num_cycles;
         if (cpu_freq != 0 && sleep_func != NULL) {
-            struct timespec end_time;
-            timespec_get(&end_time, TIME_UTC);
-
-            double time_exec = (double)end_time.tv_sec - (double)start_time.tv_sec + ((double)end_time.tv_nsec
-                    - (double)start_time.tv_nsec) / 1000000000;
-            double time_to_sleep = ((double)cycles - (double)start_cycle) * (1/(double)cpu_freq) - time_exec;
-            sleep_func(time_to_sleep);
+            sleep_func(cycles - start_cycle);
         }
 
         if (current_interrupt != 0) {

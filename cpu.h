@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef void (*SleepFunction)(double time_to_sleep);
+typedef void (*SleepFunction)(uint64_t cycles);
 
 /* Types of interrupts to be handled by the cpu.
  * The value of which corresponds to the LSB of each interrupt's respective interrupt vector (excpet for KILL) */
