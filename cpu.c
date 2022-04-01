@@ -1214,6 +1214,7 @@ static void serviceInterrupt(enum InterruptTypes interrupt) {
         push_onto_stack(pc_msb);
         push_onto_stack(pc_lsb);
         push_onto_stack(STATUS);
+        set_status_flag(STAT_IRQ_DISABLE, 1);
     }
     else {
         // Zero out registers. This is not standard behavior on the actual 6502.
