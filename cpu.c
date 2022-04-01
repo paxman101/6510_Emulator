@@ -1013,13 +1013,15 @@ static inline void bit(const uint16_t *addr_ptr) {
     set_zero_flag(A & val);
 }
 
-static inline void bif(const int8_t offset, enum StatusFlag flag, bool branch_eq) {
+// returns extra cycles needed
+static inline uint_fast8_t bif(const int8_t offset, enum StatusFlag flag, bool branch_eq) {
     if (get_status_flag(flag) == branch_eq) {
         uint16_t old_pc = PC;
         PC += offset;
         // more cycles are taken on page cross and when the branch is taken
-        cycles += crossed_boundary(old_pc+2, PC) ? 2 : 1;
+        return crossed_boundary(old_pc+2, PC) ? 2 : 1;
     }
+    return 0;
 }
 
 static inline void tax() {
@@ -1251,6 +1253,86 @@ static inline void call1(const struct OpcodeInfo *info, uint16_t *addr_ptr) {
     op_vec[info->op_type](addr_ptr);
 }
 
+static void getInstructionInfo (const struct OpcodeInfo *info, uint16_t *argument_ptr, uint_fast8_t *required_cycles_ptr, uint_fast8_t *instruction_size_ptr) {
+    *instruction_size_ptr = 0;
+    *required_cycles_ptr = info->num_cycles;
+
+    switch (info->addr_mode) {
+        case ADDR_ACCUMULATOR:
+        case ADDR_IMPLIED:
+            if (info->op_type != OP_RTI) {
+                *instruction_size_ptr = 1;
+            }
+            break;
+        case ADDR_IMMEDIATE: {
+            *argument_ptr = PC + 1;
+            *instruction_size_ptr = 2;
+            break;
+        }
+        case ADDR_ABSOLUTE: {
+            *argument_ptr = (getMemoryValue(PC + 2) << 8) + getMemoryValue(PC + 1);
+            if (info->op_type != OP_JMP && info->op_type != OP_JSR) {
+                *instruction_size_ptr = 3;
+            }
+            break;
+        }
+        case ADDR_ZERO_PAGE: {
+            *argument_ptr = (uint8_t) getMemoryValue(PC + 1);
+            *instruction_size_ptr = 2;
+            break;
+        }
+        case ADDR_INDEXED_ZERO_PAGE: {
+            *argument_ptr = (uint8_t)(getMemoryValue(PC + 1) + (info->index == 'X' ? X : Y));
+            *instruction_size_ptr = 2;
+            break;
+        }
+        case ADDR_INDEX_ABSOLUTE: {
+            uint16_t abs_addr = (getMemoryValue(PC + 2) << 8) + getMemoryValue(PC + 1);
+            *argument_ptr = abs_addr + (info->index == 'X' ? X : Y);
+            if (info->extra_cycle_if_cross && crossed_boundary(abs_addr, *argument_ptr)) {
+                (*required_cycles_ptr)++;
+            }
+            *instruction_size_ptr = 3;
+            break;
+        }
+        case ADDR_RELATIVE:
+            assert(info->op_type == OP_BIF);
+            *argument_ptr = (uint16_t)((int8_t)getMemoryValue(PC + 1));
+
+            *instruction_size_ptr = 2;
+            break;
+        case ADDR_INDEXED_INDIRECT: {
+            assert(info->index == 'X');
+            uint8_t low_byte = getMemoryValue((uint8_t)(X + getMemoryValue(PC + 1)));
+            uint8_t high_byte = getMemoryValue((uint8_t)(X + getMemoryValue(PC + 1) + 1));
+            *argument_ptr = (high_byte << 8) + low_byte;
+            *instruction_size_ptr = 2;
+            break;
+        }
+        case ADDR_INDIRECT_INDEXED: {
+            assert(info->index == 'Y');
+            uint8_t low_byte = getMemoryValue((uint8_t)(getMemoryValue(PC + 1)));
+            uint8_t high_byte = getMemoryValue((uint8_t)(getMemoryValue(PC + 1) + 1));
+            uint16_t indirect_addr = (high_byte << 8) + low_byte;
+            *argument_ptr = Y + indirect_addr;
+            if (info->extra_cycle_if_cross && crossed_boundary(indirect_addr, *argument_ptr)) {
+                (*required_cycles_ptr)++;
+            }
+            *instruction_size_ptr = 2;
+            break;
+        }
+        case ADDR_ABSOLUTE_INDIRECT: {
+            assert(info->op_type == OP_JMP);
+            uint8_t low_byte = getMemoryValue((getMemoryValue(PC + 2) << 8) + getMemoryValue(PC + 1));
+            uint8_t high_byte = getMemoryValue((getMemoryValue(PC + 2) << 8) + (uint8_t)(getMemoryValue(PC + 1) + 1));
+            *argument_ptr = (high_byte << 8) + low_byte;
+            break;
+        }
+        default:
+            assert(false);
+    }
+}
+
 void initCPU() {
     init_opcode_vec();
     resetCPU();
@@ -1266,15 +1348,19 @@ void triggerInterrupt(enum InterruptTypes interrupt) {
 
 void runLoop(void *aux) {
     FILE *log_stream = aux;
+//    setvbuf(log_stream, NULL, _IONBF, 0);
     while (true) {
         const struct OpcodeInfo *next_op = &OPCODE_INFO_VEC[getMemoryValue(PC)];
         uint64_t start_cycle = cycles;
         struct timespec start_time;
-        timespec_get(&start_time, TIME_UTC);
+//        timespec_get(&start_time, TIME_UTC);
 
-        if (log_stream) {
-            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%lu\n", PC, getMemoryValue(PC),
+        static bool te = false;
+
+        if (log_stream ) {//(te || getMemoryValue(0xC2) == 0xa0)) {
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%I64u\n", PC, getMemoryValue(PC),
                    A, X, Y, STATUS, S, cycles);
+            te = true;
         }
 
         switch (next_op->addr_mode) {
@@ -1372,6 +1458,54 @@ void runLoop(void *aux) {
             current_interrupt = 0;
         }
     }
+}
+
+void runCycle(void *log_stream) {
+    static uint_fast8_t cycle_count = 1;
+    static struct OpcodeInfo *current_opinfo;
+    static uint16_t instruction_arg = 0;
+    static uint_fast8_t instruction_cycles = 0;
+    static uint_fast8_t instruction_size = 0;
+
+    // Process instruction argument on the first cycle
+    if (cycle_count == 1) {
+        if (log_stream) {
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%llu\n", PC, getMemoryValue(PC),
+                    A, X, Y, STATUS, S, cycles-1);
+        }
+        current_opinfo = &OPCODE_INFO_VEC[getMemoryValue(PC)];
+        instruction_arg = 0;
+        instruction_cycles = 0;
+        getInstructionInfo(current_opinfo, &instruction_arg, &instruction_cycles, &instruction_size);
+
+        if (current_opinfo->op_type == OP_BIF) {
+            instruction_cycles += bif((int8_t)instruction_arg, current_opinfo->branch_condition, current_opinfo->branch_eq);
+        }
+    }
+    // Execute the instruction on the last cycle
+    else if (cycle_count == instruction_cycles) {
+        cycle_count = 0;
+        if (current_opinfo->addr_mode == ADDR_ACCUMULATOR || current_opinfo->addr_mode == ADDR_IMPLIED) {
+            call0(current_opinfo);
+        }
+        else if (current_opinfo->addr_mode == ADDR_RELATIVE) {
+        }
+        else {
+            call1(current_opinfo, &instruction_arg);
+        }
+        PC += instruction_size;
+
+        if (current_interrupt != 0) {
+            if (current_interrupt == INT_KILL) {
+                return;
+            }
+            serviceInterrupt(current_interrupt);
+            current_interrupt = 0;
+            return;
+        }
+    }
+    cycles++;
+    cycle_count++;
 }
 
 void stopCPUExecution() {

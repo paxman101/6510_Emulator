@@ -32,6 +32,13 @@ void triggerInterrupt(enum InterruptTypes interrupt);
  * each cycle. */
 void runLoop(void *aux);
 
+/* Like runLoop(), can be used to cause execution of the CPU.
+ * However, this function will only cause one single cycle of
+ * execution before returning.
+ * This may be used to more accurately emulate the timings of
+ * the 6502. */
+void runCycle(void *log_stream);
+
 /* Stops CPU execution by raising INT_KILL. */
 void stopCPUExecution();
 

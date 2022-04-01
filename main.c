@@ -27,6 +27,9 @@ int main() {
     initCPU();
     FILE *fs = fopen("testing/testnes.log", "w");
     setCPUFreq(100000);
+    while (1) {
+        runCycle(fs);
+    }
     runLoop(fs);
 
     fclose(fs);
