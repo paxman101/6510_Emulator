@@ -1142,7 +1142,19 @@ static inline void clv() {
 
 static inline void brk() {
     set_status_flag(STAT_BRK_COMMAND, 1);
+
+    uint8_t pc_lsb = (PC + 2) & 0x00FF;
+    uint8_t pc_msb = ((PC + 2) & 0xFF00) >> 8;
+    push_onto_stack(pc_msb);
+    push_onto_stack(pc_lsb);
+    push_onto_stack(STATUS);
+
     set_status_flag(STAT_IRQ_DISABLE, 1);
+
+    /* sub one because the logic will inc. PC by one (size of BRK cmd).
+     * A little hacky. */
+
+    PC = (getMemoryValue(0xFFFF) << 8) + getMemoryValue(0xFFFE) - 1;
 }
 
 static inline void nop() {
