@@ -849,7 +849,7 @@ static inline void sbc(const uint16_t *addr_ptr) {
     uint8_t prev_a = A;
     uint8_t val = getMemoryValue(*addr_ptr);
     A = A + ~(val) + get_status_flag(STAT_CARRY);
-    set_status_flag(STAT_CARRY, (int8_t)A >= 0);
+    set_status_flag(STAT_CARRY, prev_a >= val);
     set_zero_flag(A);
     set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (~(val) ^ A) & 0x80));
     set_negative_flag(A);
@@ -1226,6 +1226,7 @@ static void serviceInterrupt(enum InterruptTypes interrupt) {
         push_onto_stack(pc_msb);
         push_onto_stack(pc_lsb);
         push_onto_stack(STATUS);
+        set_status_flag(STAT_IRQ_DISABLE, 1);
     }
     else {
         // Zero out registers. This is not standard behavior on the actual 6502.
