@@ -871,11 +871,28 @@ static inline void sbc(const uint16_t *addr_ptr) {
     /* formulas from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
     uint8_t prev_a = A;
     uint8_t val = getMemoryValue(*addr_ptr);
-    A = A + ~(val) + get_status_flag(STAT_CARRY);
-    set_status_flag(STAT_CARRY, prev_a >= val);
+    bool carry = get_status_flag(STAT_CARRY);
+    uint8_t binary_result = A + ~(val) + carry;
+
+    if (!get_status_flag(STAT_DEC_MODE)) {
+        A = binary_result;
+    }
+    else {
+        /* BCD behavior from http://6502.org/tutorials/decimal_mode.html */
+        uint8_t AL = (A & 0x0F) - (val  & 0x0F) + carry - 1;
+        /* if negative */
+        if (AL & 0x80) {
+            AL = ((AL - 0x06) & 0x0F) - 0x10;
+        }
+        A = (A & 0xF0) - (val & 0xF0) + AL;
+        if (A & 0x80) {
+            A = A - 0x60;
+        }
+    }
+    set_status_flag(STAT_CARRY, binary_result < prev_a + ~val + carry);
     set_zero_flag(A);
-    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (~(val) ^ A) & 0x80));
-    set_negative_flag(A);
+    set_status_flag(STAT_OVERFLOW, ((prev_a ^ binary_result) & (~(val) ^ binary_result) & 0x80));
+    set_negative_flag(binary_result);
 }
 
 /* Increment and decrement */
