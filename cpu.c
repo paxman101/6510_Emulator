@@ -836,12 +836,35 @@ static inline void sty(const uint16_t *addr_ptr) {
 static inline void adc(const uint16_t *addr_ptr) {
     uint8_t prev_a = A;
     uint8_t val = getMemoryValue(*addr_ptr);
-    A = A + val + get_status_flag(STAT_CARRY);
-    set_status_flag(STAT_CARRY, A < val);
-    set_zero_flag(A);
-    /* overflow from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
-    set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (val ^ A) & 0x80));
-    set_negative_flag(A);
+    bool carry = get_status_flag(STAT_CARRY);
+
+    if (!get_status_flag(STAT_DEC_MODE)) {
+        A = A + val + carry;
+        set_negative_flag(A);
+        /* overflow from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
+        set_status_flag(STAT_OVERFLOW, ((prev_a ^ A) & (val ^ A) & 0x80));
+        set_zero_flag(A);
+        set_status_flag(STAT_CARRY, A < prev_a + val + carry);
+    }
+    else {
+        /* BCD behavior from http://6502.org/tutorials/decimal_mode.html */
+        uint8_t AL = (A & 0x0F) + (val & 0x0F) + carry;
+        if (AL >= 0x0A) {
+            AL = ((AL + 0x06) & 0x0F) + 0x10;
+        }
+        unsigned int uncapped = (A & 0xF0) + (val & 0xF0) + AL;
+        set_negative_flag(uncapped);
+        set_status_flag(STAT_OVERFLOW, ((prev_a ^ uncapped) & (val ^ uncapped) & 0x80));
+        if (uncapped >= 0xA0) {
+            uncapped += 0x60;
+        }
+
+        set_status_flag(STAT_CARRY, uncapped >= 0x100);
+        A = (uint8_t)uncapped;
+
+        /* Zero for BCD ADC is set on the same values as normal binary addition .*/
+        set_zero_flag(prev_a + val + carry);
+    }
 }
 
 static inline void sbc(const uint16_t *addr_ptr) {
@@ -1482,14 +1505,15 @@ void runCycle(void *log_stream) {
 
     // Process instruction argument on the first cycle
     if (cycle_count == 1) {
-        if (log_stream) {
-            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%llu\n", PC, getMemoryValue(PC),
-                    A, X, Y, STATUS, S, cycles-1);
-        }
         current_opinfo = &OPCODE_INFO_VEC[getMemoryValue(PC)];
         instruction_arg = 0;
         instruction_cycles = 0;
         getInstructionInfo(current_opinfo, &instruction_arg, &instruction_cycles, &instruction_size);
+
+        if (log_stream) {
+            fprintf(log_stream, "%04X  %02X    A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%lu\n", PC, getMemoryValue(PC),
+                    A, X, Y, STATUS, S, cycles-1);
+        }
 
         if (current_opinfo->op_type == OP_BIF) {
             instruction_cycles += bif((int8_t)instruction_arg, current_opinfo->branch_condition, current_opinfo->branch_eq);
