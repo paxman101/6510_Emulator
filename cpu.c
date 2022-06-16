@@ -26,6 +26,8 @@ static uint8_t  S;         /* stack point */
 static uint64_t cycles;
 static uint32_t cpu_freq;  /* CPU freq to emulate in hz. */
 
+static bool NES_mode = false;
+
 static enum InterruptTypes current_interrupt = 0;
 static SleepFunction sleep_func = NULL;
 
@@ -838,7 +840,7 @@ static inline void adc(const uint16_t *addr_ptr) {
     uint8_t val = getMemoryValue(*addr_ptr);
     bool carry = get_status_flag(STAT_CARRY);
 
-    if (!get_status_flag(STAT_DEC_MODE)) {
+    if (!get_status_flag(STAT_DEC_MODE) || NES_mode) {
         A = A + val + carry;
         set_negative_flag(A);
         /* overflow from http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html */
@@ -874,7 +876,7 @@ static inline void sbc(const uint16_t *addr_ptr) {
     bool carry = get_status_flag(STAT_CARRY);
     uint8_t binary_result = A + ~(val) + carry;
 
-    if (!get_status_flag(STAT_DEC_MODE)) {
+    if (!get_status_flag(STAT_DEC_MODE) || NES_mode) {
         A = binary_result;
     }
     else {
@@ -1389,6 +1391,10 @@ static void getInstructionInfo (const struct OpcodeInfo *info, uint16_t *argumen
 void initCPU() {
     init_opcode_vec();
     resetCPU();
+}
+
+void setNESMode(bool enable_NES_mode) {
+    NES_mode = enable_NES_mode;
 }
 
 void resetCPU() {

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 typedef void (*SleepFunction)(uint64_t cycles);
 
@@ -20,6 +21,9 @@ enum InterruptTypes {
 };
 
 void initCPU();
+
+/* When set true, the BCD flag is ignored like on the Ricoh 2A03 */
+void setNESMode(bool enable_NES_mode);
 
 /* Triggers an INT_RESET. */
 void resetCPU();
