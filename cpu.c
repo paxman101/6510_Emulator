@@ -891,7 +891,8 @@ static inline void sbc(const uint16_t *addr_ptr) {
             A = A - 0x60;
         }
     }
-    set_status_flag(STAT_CARRY, binary_result < prev_a + ~val + carry);
+    /* AND ~val w/ 0xFF because integer promotion may cause overflow otherwise. */
+    set_status_flag(STAT_CARRY, binary_result < prev_a + (~val & 0xFF) + carry);
     set_zero_flag(A);
     set_status_flag(STAT_OVERFLOW, ((prev_a ^ binary_result) & (~(val) ^ binary_result) & 0x80));
     set_negative_flag(binary_result);
